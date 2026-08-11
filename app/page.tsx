@@ -6,6 +6,7 @@ import NavBar from '@/components/NavBar';
 import HamburgerMenu from '@/components/HamburgerMenu';
 import Footer from '@/components/Footer';
 import SettingsPanel from '@/components/SettingsPanel';
+import WordleBuilder from '@/components/wordle/WordleBuilder';
 
 type View = 'wordle' | 'wordsearch' | 'about' | 'settings';
 
@@ -20,7 +21,7 @@ export default function Home() {
         <HamburgerMenu onSelect={setActiveView} />
       </div>
       <main className="flex-1 px-4 py-6 sm:px-6">
-        {activeView === 'wordle' && <div>Wordle builder placeholder</div>}
+        {activeView === 'wordle' && <WordleBuilder />}
         {activeView === 'wordsearch' && <div>Word Search builder placeholder</div>}
         {activeView === 'about' && <div>About placeholder</div>}
         {activeView === 'settings' && <SettingsPanel />}

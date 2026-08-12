@@ -1,4 +1,3 @@
-// components/NavBar.tsx
 type View = 'wordle' | 'wordsearch' | 'about' | 'settings';
 
 type Props = {

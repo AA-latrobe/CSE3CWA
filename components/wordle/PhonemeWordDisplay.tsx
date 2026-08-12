@@ -1,4 +1,3 @@
-// components/wordle/PhonemeWordDisplay.tsx
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { MAX_PHONEME_SLOTS } from '@/lib/phonemeData';

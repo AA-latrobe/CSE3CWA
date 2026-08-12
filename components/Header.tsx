@@ -1,4 +1,3 @@
-// components/Header.tsx
 export default function Header() {
   return (
     <header className="w-full border-b border-foreground/10 bg-background px-4 py-4 sm:px-6">

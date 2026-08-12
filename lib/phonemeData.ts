@@ -134,3 +134,9 @@ export const DEFAULT_SELECTED_WORD = 'blank';
 export const DEFAULT_SELECTED_ENTRY: PhonemeWordEntry = WORD_LIST.find(
   (w) => w.word === DEFAULT_SELECTED_WORD
 )!;
+
+export function getPhonemeHoverText(symbol: string): string {
+  // Placeholder — will grow to include a pronunciation example once that
+  // mapping table exists, e.g. `/${symbol}/ — as in "cat"`.
+  return `/${symbol}/`;
+}

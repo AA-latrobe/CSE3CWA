@@ -1,4 +1,3 @@
-// components/SettingsPanel.tsx
 'use client';
 import { useTheme } from '@/context/ThemeContext';
 

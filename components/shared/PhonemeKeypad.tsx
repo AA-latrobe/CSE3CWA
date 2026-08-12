@@ -1,6 +1,7 @@
 'use client';
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import { CellColor } from '@/lib/wordleLogic';
+import { getPhonemeHoverText } from '@/lib/phonemeData';
 
 type Props = {
   topGrid: string[][];
@@ -8,8 +9,8 @@ type Props = {
   onSelect: (symbol: string) => void;
   onBackspace: () => void;
   disabled?: boolean;
-  usedSymbols?: Set<string>; // config-panel keypad: grey-out "already covered" keys
-  letterColors?: Record<string, CellColor>; // preview keypad: green/yellow/grey feedback from guesses
+  usedSymbols?: Set<string>;
+  letterColors?: Record<string, CellColor>;
   showEnter?: boolean;
   canSubmit?: boolean;
   onEnter?: () => void;
@@ -49,6 +50,7 @@ export default function PhonemeKeypad({
               key={`${keyPrefix}-${ri}-${ci}`}
               type="button"
               disabled={disabled}
+              title={getPhonemeHoverText(symbol)}
               onClick={() => onSelect(symbol)}
               className={`flex h-10 w-10 items-center justify-center rounded-md text-sm font-medium hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${keyColorClass(
                 symbol,

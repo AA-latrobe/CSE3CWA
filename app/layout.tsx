@@ -1,4 +1,3 @@
-// app/layout.tsx
 import { ThemeProvider } from '@/context/ThemeContext';
 import './globals.css';
 

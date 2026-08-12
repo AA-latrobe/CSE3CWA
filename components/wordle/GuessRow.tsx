@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { CellColor } from '@/lib/wordleLogic';
+import { getPhonemeHoverText } from '@/lib/phonemeData';
 
 type Props = {
   wordSize: number;
-  symbols: string[]; // letters typed/submitted for this row — may be shorter than wordSize
-  colors: CellColor[] | null; // null until this row is submitted
+  symbols: string[];
+  colors: CellColor[] | null;
 };
 
 const FLIP_DURATION_MS = 500;
@@ -20,7 +21,6 @@ function cellClass(color: CellColor | null) {
     case 'grey':
       return 'bg-key text-key-foreground';
     default:
-      // Not yet revealed (still typing, or an empty future row).
       return 'border-2 border-foreground/20 text-foreground';
   }
 }
@@ -37,7 +37,6 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
     const isSubmitted = colors !== null;
 
     if (isSubmitted && !wasSubmitted.current) {
-      // Just submitted this guess — run the staggered reveal, left to right.
       timers.current.forEach(clearTimeout);
       timers.current = [];
 
@@ -51,8 +50,6 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
               return next;
             });
           }, delay),
-          // Color swaps at the flip's midpoint — tile is edge-on and
-          // invisible at that instant, same trick used elsewhere.
           setTimeout(() => {
             setDisplayColors((prev) => {
               const next = [...prev];
@@ -72,7 +69,6 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
     }
 
     if (!isSubmitted && wasSubmitted.current) {
-      // Row was cleared (e.g. Reset Game) — snap back instantly, no animation.
       timers.current.forEach(clearTimeout);
       timers.current = [];
       setDisplayColors(Array(wordSize).fill(null));
@@ -86,17 +82,21 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
 
   return (
     <div className="flex gap-1">
-      {Array.from({ length: wordSize }).map((_, i) => (
-        <div key={i} style={{ perspective: '400px' }}>
-          <div
-            className={`flex h-12 w-12 items-center justify-center rounded-md text-lg font-semibold ${cellClass(
-              displayColors[i]
-            )} ${flipping[i] ? 'animate-tile-flip' : ''}`}
-          >
-            {symbols[i] ?? ''}
+      {Array.from({ length: wordSize }).map((_, i) => {
+        const symbol = symbols[i];
+        return (
+          <div key={i} style={{ perspective: '400px' }}>
+            <div
+              title={symbol ? getPhonemeHoverText(symbol) : undefined}
+              className={`flex h-12 w-12 items-center justify-center rounded-md text-lg font-semibold ${cellClass(
+                displayColors[i]
+              )} ${flipping[i] ? 'animate-tile-flip' : ''}`}
+            >
+              {symbol ?? ''}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

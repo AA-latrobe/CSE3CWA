@@ -1,4 +1,5 @@
 'use client';
+import FlipTile from './FlipTile';
 
 type Props = {
   label: string;
@@ -16,9 +17,10 @@ export default function Stepper({ label, value, min, max, onChange, suffix }: Pr
         {label}
       </label>
       <div className="flex items-center justify-center gap-3">
-        <span className="w-16 text-center text-foreground">
-          {value}{suffix ? ` ${suffix}` : ''}
-        </span>
+        <FlipTile
+          value={suffix ? `${value} ${suffix}` : value}
+          className="h-12 min-w-[3.25rem] bg-match px-2 text-lg text-match-foreground"
+        />
         <div className="flex flex-col">
           <button
             type="button"

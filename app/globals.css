@@ -46,6 +46,22 @@
   --font-mono: var(--font-geist-mono);
 }
 
+@keyframes tile-flip {
+  0% {
+    transform: rotateX(0deg);
+  }
+  50% {
+    transform: rotateX(90deg);
+  }
+  100% {
+    transform: rotateX(0deg);
+  }
+}
+
+.animate-tile-flip {
+  animation: tile-flip 0.5s ease-in-out;
+}
+
 body {
   background: var(--color-background);
   color: var(--color-foreground);

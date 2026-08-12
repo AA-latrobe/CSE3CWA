@@ -3,6 +3,8 @@ export interface PhonemeWordEntry {
   phonemes: string[]; // 3–5 phonemes, unpadded
 }
 
+export const PREVIEW_TITLE_PHONEMES = ['w', 'ɜː', 'd', 'ə', 'l']; // "wordle" in phoneme form
+
 // From HCE_Wordle_Phoneme_Corpus.docx — 12 rows x 4 cols, some cells unused
 export const KEYPAD_GRID: string[][] = [
   ['p', 't', 'k', ''],
@@ -128,3 +130,7 @@ export const WORD_LIST: PhonemeWordEntry[] = [...RAW_WORD_LIST].sort((a, b) =>
 );
 
 export const DEFAULT_SELECTED_WORD = 'blank';
+
+export const DEFAULT_SELECTED_ENTRY: PhonemeWordEntry = WORD_LIST.find(
+  (w) => w.word === DEFAULT_SELECTED_WORD
+)!;

@@ -1,19 +1,19 @@
 'use client';
-import { useState, useRef, useMemo, useEffect } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import PhonemeKeypad from './PhonemeKeypad';
 import {
   WORD_LIST,
   KEYPAD_TOP,
   KEYPAD_BOTTOM,
   MAX_PHONEME_SLOTS,
-  DEFAULT_SELECTED_WORD,
   PhonemeWordEntry,
 } from '@/lib/phonemeData';
 
 type Props = {
-  onSelectedWordsChange?: (words: PhonemeWordEntry[]) => void;
-  // Slot for a game-specific control (e.g. Number of Guesses for Wordle,
-  // something else for Word Search) rendered under the keypad on the right.
+  // Now fully controlled — WordleBuilder (or WordSearchBuilder later) owns
+  // this state and passes it down. No internal duplicate copy anymore.
+  selectedWords: PhonemeWordEntry[];
+  onSelectedWordsChange: (words: PhonemeWordEntry[]) => void;
   footerSlot?: React.ReactNode;
 };
 
@@ -26,7 +26,7 @@ interface ListRow {
 }
 
 const VISIBLE_ROWS = 5;
-const ROW_HEIGHT_PX = 44; // matches a row's py-2 + text-sm + border
+const ROW_HEIGHT_PX = 44;
 
 function cellClass(color: CellColor) {
   switch (color) {
@@ -42,26 +42,20 @@ function cellClass(color: CellColor) {
   }
 }
 
-export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot }: Props) {
-  const defaultEntry = WORD_LIST.find((w) => w.word === DEFAULT_SELECTED_WORD)!;
-  const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>([defaultEntry]);
+export default function PhonemeWordSelector({
+  selectedWords,
+  onSelectedWordsChange,
+  footerSlot,
+}: Props) {
   const [searchPhonemes, setSearchPhonemes] = useState<string[]>([]);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    onSelectedWordsChange?.(selectedWords);
-  }, [selectedWords, onSelectedWordsChange]);
-
-  // Derived, not stored — guarantees "available" can never drift out of sync
-  // with "selected" (no separate list to keep manually in step).
   const availableWords = useMemo(
     () => WORD_LIST.filter((w) => !selectedWords.some((s) => s.word === w.word)),
     [selectedWords]
   );
 
-  // Every symbol present anywhere across the current Selected Words —
-  // used to grey out "already covered" keys on the config-panel keypad.
   const usedSymbols = useMemo(() => {
     const set = new Set<string>();
     for (const w of selectedWords) {
@@ -70,14 +64,11 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
     return set;
   }, [selectedWords]);
 
-  // Colors for the "Search by Phoneme" boxes themselves.
   const searchBoxColors: SearchBoxColor[] = useMemo(() => {
     const colors: SearchBoxColor[] = Array(MAX_PHONEME_SLOTS).fill('none');
     if (searchPhonemes.length === 0) return colors;
 
     if (searchPhonemes.length === 1) {
-      // Single phoneme: green if some word STARTS with it, otherwise yellow
-      // if it merely appears somewhere in at least one word, otherwise plain.
       const symbol = searchPhonemes[0];
       const startsWord = availableWords.some((w) => w.phonemes[0] === symbol);
       const appearsAnywhere = availableWords.some((w) => w.phonemes.includes(symbol));
@@ -85,8 +76,6 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
       return colors;
     }
 
-    // Two or more phonemes: strict prefix mode. If the full typed sequence
-    // matches at least one word's prefix, every typed box goes green.
     const hasMatch = availableWords.some((w) =>
       searchPhonemes.every((symbol, i) => w.phonemes[i] === symbol)
     );
@@ -96,9 +85,7 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
     return colors;
   }, [availableWords, searchPhonemes]);
 
-  // Word List rows: three modes depending on how much has been typed.
   const listRows: ListRow[] = useMemo(() => {
-    // Nothing typed — plain alphabetical list, no highlighting.
     if (searchPhonemes.length === 0) {
       return availableWords.map((entry) => ({
         entry,
@@ -108,22 +95,18 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
       }));
     }
 
-    // Exactly one phoneme typed — grouped/position-priority mode.
-    // Words are grouped by the FIRST position the symbol occurs at (0-based),
-    // group 0 (starts with it) first, then group 1, 2, 3, 4 in order.
-    // A word can only appear once, under its earliest occurrence's group.
     if (searchPhonemes.length === 1) {
       const symbol = searchPhonemes[0];
       const groups: ListRow[][] = Array.from({ length: MAX_PHONEME_SLOTS }, () => []);
 
       for (const entry of availableWords) {
         const primaryIndex = entry.phonemes.findIndex((p) => p === symbol);
-        if (primaryIndex === -1) continue; // word doesn't contain this phoneme at all
+        if (primaryIndex === -1) continue;
 
         const colors: CellColor[] = Array.from({ length: MAX_PHONEME_SLOTS }, (_, i) => {
           if (!entry.phonemes[i]) return 'empty';
           if (i === primaryIndex) return primaryIndex === 0 ? 'green' : 'yellow';
-          if (entry.phonemes[i] === symbol) return 'yellow'; // repeated occurrence, bonus highlight
+          if (entry.phonemes[i] === symbol) return 'yellow';
           return 'grey';
         });
 
@@ -133,7 +116,6 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
       return groups.flat();
     }
 
-    // Two or more phonemes typed — straightforward prefix filtering.
     return availableWords
       .filter((entry) => searchPhonemes.every((symbol, i) => entry.phonemes[i] === symbol))
       .map((entry) => ({
@@ -164,37 +146,32 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
   };
 
   const handleRowSelect = (entry: PhonemeWordEntry) => {
-    setSelectedWords((prev) => [...prev, entry]);
-    setSearchPhonemes([]); // cleared, but deliberately no scrollListToTop() here —
-    // the full list should stay scrolled where it was so browsing continues naturally.
+    onSelectedWordsChange([...selectedWords, entry]);
+    setSearchPhonemes([]);
   };
 
   const handleClearWord = () => {
     if (!highlighted) return;
-    setSelectedWords((prev) => prev.filter((w) => w.word !== highlighted));
+    onSelectedWordsChange(selectedWords.filter((w) => w.word !== highlighted));
     setHighlighted(null);
   };
 
   const handleClearAll = () => {
-    setSelectedWords([]);
+    onSelectedWordsChange([]);
     setHighlighted(null);
   };
 
   const handleRandomise = () => {
-    setSelectedWords((prev) => {
-      const shuffled = [...prev];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
-    });
+    const shuffled = [...selectedWords];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    onSelectedWordsChange(shuffled);
   };
 
   return (
     <div className="flex flex-col gap-8 md:flex-row md:items-start md:gap-8">
-      {/* Left column: search, browse list, selected words. Fixed max-width so
-          it never grows wider even as the keypad column reflows around it. */}
       <div className="flex w-full max-w-[360px] flex-col gap-6">
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">
@@ -329,8 +306,6 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
         </div>
       </div>
 
-      {/* Right column: keypad + footer slot underneath it, both centered
-          within this column's full available width. */}
       <div className="min-w-0 flex-1">
         <PhonemeKeypad
           topGrid={KEYPAD_TOP}
@@ -339,12 +314,7 @@ export default function PhonemeWordSelector({ onSelectedWordsChange, footerSlot 
           onBackspace={handleBackspace}
           usedSymbols={usedSymbols}
         />
-        <div
-          className="flex w-full justify-center"
-          style={{ marginTop: ROW_HEIGHT_PX + 24 }} // one extra list-row's worth of space, on top of the normal gap
-        >
-          {footerSlot}
-        </div>
+        <div className="mt-6 flex w-full justify-center">{footerSlot}</div>
       </div>
     </div>
   );

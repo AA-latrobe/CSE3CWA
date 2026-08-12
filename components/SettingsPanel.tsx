@@ -11,7 +11,7 @@ export default function SettingsPanel() {
       <h2 className="mb-4 text-lg font-semibold text-foreground">Settings</h2>
 
       <div className="flex items-center justify-between rounded-md border border-foreground/10 p-4">
-        <span className="text-foreground">Dark Mode</span>
+        <span className="text-foreground">Dark Theme</span>
 
         <button
           role="switch"

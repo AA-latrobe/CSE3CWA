@@ -1,4 +1,3 @@
-// components/shared/PhonemeKeypad.tsx
 'use client';
 import { useContainerWidth } from '@/lib/useContainerWidth';
 
@@ -8,11 +7,19 @@ type Props = {
   onSelect: (symbol: string) => void;
   onBackspace: () => void;
   disabled?: boolean;
+  usedSymbols?: Set<string>; // symbols present anywhere in the current Selected Words
 };
 
 const SIDE_BY_SIDE_THRESHOLD = 420;
 
-export default function PhonemeKeypad({ topGrid, bottomGrid, onSelect, onBackspace, disabled }: Props) {
+export default function PhonemeKeypad({
+  topGrid,
+  bottomGrid,
+  onSelect,
+  onBackspace,
+  disabled,
+  usedSymbols,
+}: Props) {
   const { ref, isWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
 
   const renderGrid = (grid: string[][], keyPrefix: string) => (
@@ -25,7 +32,11 @@ export default function PhonemeKeypad({ topGrid, bottomGrid, onSelect, onBackspa
               type="button"
               disabled={disabled}
               onClick={() => onSelect(symbol)}
-              className="flex h-10 w-10 items-center justify-center rounded-md border border-foreground/20 bg-background text-sm font-medium text-foreground hover:bg-foreground/10 disabled:cursor-not-allowed disabled:opacity-40"
+              className={`flex h-10 w-10 items-center justify-center rounded-md text-sm font-medium hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${
+                usedSymbols?.has(symbol)
+                  ? 'bg-key-used text-key-used-foreground'
+                  : 'bg-key text-key-foreground'
+              }`}
             >
               {symbol}
             </button>
@@ -38,12 +49,7 @@ export default function PhonemeKeypad({ topGrid, bottomGrid, onSelect, onBackspa
   );
 
   return (
-    // Measurement target — always full width of whatever the parent gives it,
-    // so the ResizeObserver reads real available space, never the size of its
-    // own (possibly centered/shrunk) content.
     <div ref={ref} className="w-full">
-      {/* Visual content — centers itself WITHIN the full-width box above,
-          independent of what's being measured. */}
       <div
         className={`flex gap-y-4 gap-x-8 ${
           isWide ? 'flex-row items-start justify-center' : 'flex-col items-center'
@@ -60,7 +66,7 @@ export default function PhonemeKeypad({ topGrid, bottomGrid, onSelect, onBackspa
             type="button"
             disabled={disabled}
             onClick={onBackspace}
-            className="w-full rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-500 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-md bg-key px-3 py-2 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ⌫ Backspace
           </button>

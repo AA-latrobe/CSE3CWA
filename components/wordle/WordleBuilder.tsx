@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState } from 'react'
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
 import PhonemeKeypad from '@/components/shared/PhonemeKeypad';
 import Stepper from '@/components/shared/Stepper';

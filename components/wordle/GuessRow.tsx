@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { CellColor } from '@/lib/wordleLogic';
+import { CellColor, GUESS_FLIP_DURATION_MS, GUESS_FLIP_STAGGER_MS } from '@/lib/wordleLogic';
 import { getPhonemeHoverText } from '@/lib/phonemeData';
 
 type Props = {
@@ -8,9 +8,6 @@ type Props = {
   symbols: string[];
   colors: CellColor[] | null;
 };
-
-const FLIP_DURATION_MS = 500;
-const STAGGER_MS = 150;
 
 function cellClass(color: CellColor | null) {
   switch (color) {
@@ -41,7 +38,7 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
       timers.current = [];
 
       colors!.forEach((color, i) => {
-        const delay = i * STAGGER_MS;
+        const delay = i * GUESS_FLIP_STAGGER_MS;
         timers.current.push(
           setTimeout(() => {
             setFlipping((prev) => {
@@ -56,14 +53,14 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
               next[i] = color;
               return next;
             });
-          }, delay + FLIP_DURATION_MS / 2),
+          }, delay + GUESS_FLIP_DURATION_MS / 2),
           setTimeout(() => {
             setFlipping((prev) => {
               const next = [...prev];
               next[i] = false;
               return next;
             });
-          }, delay + FLIP_DURATION_MS)
+          }, delay + GUESS_FLIP_DURATION_MS)
         );
       });
     }

@@ -101,3 +101,32 @@ export function validateHardMode(guess: string[], constraints: HardModeConstrain
 
   return null;
 }
+
+// Shared with GuessRow's own flip animation, so WordleBuilder can calculate
+// exactly when a row's flip finishes without guessing at the numbers.
+export const GUESS_FLIP_DURATION_MS = 500;
+export const GUESS_FLIP_STAGGER_MS = 150;
+
+export function computeCompletionMessage(
+  isSolved: boolean,
+  guessesUsed: number,
+  numGuesses: number
+): string {
+  if (!isSolved) return 'Maybe next time!';
+
+  switch (guessesUsed) {
+    case 1:
+      return 'Genius!';
+    case 2:
+      return 'Magnificent!';
+    case 3:
+      return 'Impressive!';
+    case 4:
+      return 'Splendid!';
+    case 5:
+      return 'Great!';
+    default:
+      // 6 or more: "Phew!" only if that was the very last guess available.
+      return guessesUsed === numGuesses ? 'Phew!' : 'Great!';
+  }
+}

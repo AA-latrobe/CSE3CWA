@@ -11,6 +11,9 @@ import {
   computeKeypadColors,
   computeHardModeConstraints,
   validateHardMode,
+  computeCompletionMessage,
+  GUESS_FLIP_DURATION_MS,
+  GUESS_FLIP_STAGGER_MS,
   CellColor,
 } from '@/lib/wordleLogic';
 import {
@@ -23,6 +26,7 @@ import {
 
 const MIN_GUESSES = 3;
 const MAX_GUESSES = 10;
+const SOLUTION_REVEAL_EXTRA_DELAY_MS = 1000;
 
 interface SubmittedGuess {
   symbols: string[];
@@ -32,10 +36,6 @@ interface SubmittedGuess {
 export default function WordleBuilder() {
   const [numGuesses, setNumGuesses] = useState(6);
   const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>([DEFAULT_SELECTED_ENTRY]);
-
-  // Bumped by BOTH Reset Game and Play Next Word/Start Over — the single
-  // explicit signal that "a new game is starting," independent of whether
-  // the target word actually changed (it won't, in a single-word list).
   const [gameSignal, setGameSignal] = useState(0);
 
   const isPlayable = selectedWords.length > 0;
@@ -54,21 +54,26 @@ export default function WordleBuilder() {
   const [hardModeError, setHardModeError] = useState<string | null>(null);
   const hasCountedResult = useRef(false);
 
-  // Selected Words list itself changed shape — invalidates any in-progress
-  // multi-word run, so start over cleanly.
+  const [solutionRevealed, setSolutionRevealed] = useState(false);
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     setCurrentWordIndex(0);
     setSolvedCount(0);
     setFailedCount(0);
   }, [selectedWords]);
 
-  // Reset the CURRENT word's gameplay whenever the target word changes,
-  // Number of Guesses changes, or a new game explicitly starts (gameSignal).
   useEffect(() => {
     setCurrentGuess([]);
     setSubmittedGuesses([]);
     setHardModeError(null);
     hasCountedResult.current = false;
+
+    setSolutionRevealed(false);
+    if (revealTimer.current) {
+      clearTimeout(revealTimer.current);
+      revealTimer.current = null;
+    }
   }, [previewWord?.word, numGuesses, gameSignal]);
 
   const isSolved =
@@ -83,17 +88,48 @@ export default function WordleBuilder() {
   const letterColors = computeKeypadColors(submittedGuesses);
   const hardModeConstraints = computeHardModeConstraints(submittedGuesses);
 
-  // Tally the moment THIS word's game ends, exactly once per game.
-  useEffect(() => {
-    if (isGameOver && !hasCountedResult.current) {
-      hasCountedResult.current = true;
-      if (isSolved) setSolvedCount((n) => n + 1);
-      else setFailedCount((n) => n + 1);
-    }
-  }, [isGameOver, isSolved]);
+  // Result-tallying effect — now keyed to submittedGuesses itself, not a
+// derived boolean that can be stale for one render during a word transition.
+useEffect(() => {
+  const solved =
+    submittedGuesses.length > 0 &&
+    submittedGuesses[submittedGuesses.length - 1].colors.every((c) => c === 'green');
+  const outOfGuesses = submittedGuesses.length >= numGuesses;
+  const gameOver = solved || outOfGuesses;
+
+  if (gameOver && !hasCountedResult.current) {
+    hasCountedResult.current = true;
+    if (solved) setSolvedCount((n) => n + 1);
+    else setFailedCount((n) => n + 1);
+  }
+}, [submittedGuesses]);
+
+// Reveal-scheduling effect — same fix. Only fires when submittedGuesses
+// actually changes (a new guess submitted, or reset to [] on a fresh game),
+// never off a transitional render where the word changed but the guesses
+// array hasn't been cleared yet.
+useEffect(() => {
+  const solved =
+    submittedGuesses.length > 0 &&
+    submittedGuesses[submittedGuesses.length - 1].colors.every((c) => c === 'green');
+  const outOfGuesses = submittedGuesses.length >= numGuesses;
+  const gameOver = solved || outOfGuesses;
+
+  if (gameOver && revealTimer.current === null) {
+    const rowFlipDuration = (wordSize - 1) * GUESS_FLIP_STAGGER_MS + GUESS_FLIP_DURATION_MS;
+    const totalDelay = rowFlipDuration + SOLUTION_REVEAL_EXTRA_DELAY_MS;
+
+    revealTimer.current = setTimeout(() => {
+      setSolutionRevealed(true);
+      revealTimer.current = null;
+    }, totalDelay);
+  }
+}, [submittedGuesses]);
+
+  const completionMessage = computeCompletionMessage(isSolved, submittedGuesses.length, numGuesses);
 
   const handleResetGame = () => {
-    if (isGameOver) return; // also enforced via disabled button, belt-and-suspenders
+    if (isGameOver) return;
     setGameSignal((n) => n + 1);
   };
 
@@ -135,8 +171,6 @@ export default function WordleBuilder() {
     } else {
       setCurrentWordIndex((i) => i + 1);
     }
-    // Always bump gameSignal — this is what guarantees the board resets
-    // even when previewWord?.word doesn't change (single-word list case).
     setGameSignal((n) => n + 1);
   };
 
@@ -167,7 +201,6 @@ export default function WordleBuilder() {
         />
       </div>
 
-      {/* Preview panel — this is the content that will eventually export to the .html file. */}
       <div className="rounded-md border border-foreground/10 p-4 sm:p-6">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">Preview</h2>
@@ -205,6 +238,10 @@ export default function WordleBuilder() {
               isGameOver={isGameOver}
               isLastWord={isLastWord}
               onPlayNextWord={handlePlayNextWord}
+              solutionPhonemes={previewWord?.phonemes ?? []}
+              solutionEnglishWord={previewWord?.word ?? ''}
+              solutionMessage={completionMessage}
+              solutionRevealed={solutionRevealed}
             />
           </div>
 

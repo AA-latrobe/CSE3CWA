@@ -1,6 +1,7 @@
 'use client';
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import GuessRow from './GuessRow';
+import SolutionReveal from './SolutionReveal';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import { CellColor } from '@/lib/wordleLogic';
 
@@ -28,6 +29,11 @@ type Props = {
   isGameOver: boolean;
   isLastWord: boolean;
   onPlayNextWord: () => void;
+  // Solution reveal
+  solutionPhonemes: string[];
+  solutionEnglishWord: string;
+  solutionMessage: string;
+  solutionRevealed: boolean;
 };
 
 const SIDE_BY_SIDE_THRESHOLD = 560;
@@ -51,6 +57,10 @@ export default function GuessGrid({
   isGameOver,
   isLastWord,
   onPlayNextWord,
+  solutionPhonemes,
+  solutionEnglishWord,
+  solutionMessage,
+  solutionRevealed,
 }: Props) {
   const { ref, isWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
 
@@ -66,11 +76,18 @@ export default function GuessGrid({
     <div ref={ref} className="w-full">
       <div className={`flex min-w-0 gap-y-6 gap-x-8 ${isWide ? 'flex-row items-start' : 'flex-col items-start'}`}>
         <div className="flex w-44 flex-shrink-0 flex-col items-start gap-3">
+          <SolutionReveal
+            phonemes={solutionPhonemes}
+            englishWord={solutionEnglishWord}
+            message={solutionMessage}
+            reveal={solutionRevealed}
+          />
+
           <button
             type="button"
             onClick={onResetGame}
             disabled={resetGameDisabled}
-            className="w-full rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-md bg-key px-3 py-1.5 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Reset Game
           </button>

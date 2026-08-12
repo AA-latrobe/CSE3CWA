@@ -282,7 +282,7 @@ export default function PhonemeWordSelector({
               type="button"
               onClick={handleClearWord}
               disabled={!highlighted}
-              className="rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md bg-key px-3 py-1.5 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Clear Word
             </button>
@@ -290,7 +290,7 @@ export default function PhonemeWordSelector({
               type="button"
               onClick={handleClearAll}
               disabled={selectedWords.length === 0}
-              className="rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md bg-key px-3 py-1.5 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Clear All Words
             </button>
@@ -298,7 +298,7 @@ export default function PhonemeWordSelector({
               type="button"
               onClick={handleRandomise}
               disabled={selectedWords.length < 2}
-              className="rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-md bg-key px-3 py-1.5 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Randomise
             </button>

@@ -15,10 +15,19 @@ type Props = {
   currentGuess: string[];
   submittedGuesses: SubmittedGuess[];
   onResetGame: () => void;
+  resetGameDisabled: boolean;
   hardMode: boolean;
   onHardModeChange: (value: boolean) => void;
   hardModeLocked: boolean;
   hardModeError?: string | null;
+  showStats: boolean;
+  totalWords: number;
+  currentWordNumber: number;
+  solvedCount: number;
+  failedCount: number;
+  isGameOver: boolean;
+  isLastWord: boolean;
+  onPlayNextWord: () => void;
 };
 
 const SIDE_BY_SIDE_THRESHOLD = 560;
@@ -29,10 +38,19 @@ export default function GuessGrid({
   currentGuess,
   submittedGuesses,
   onResetGame,
+  resetGameDisabled,
   hardMode,
   onHardModeChange,
   hardModeLocked,
   hardModeError,
+  showStats,
+  totalWords,
+  currentWordNumber,
+  solvedCount,
+  failedCount,
+  isGameOver,
+  isLastWord,
+  onPlayNextWord,
 }: Props) {
   const { ref, isWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
 
@@ -51,7 +69,8 @@ export default function GuessGrid({
           <button
             type="button"
             onClick={onResetGame}
-            className="w-full rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5"
+            disabled={resetGameDisabled}
+            className="w-full rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Reset Game
           </button>
@@ -62,10 +81,29 @@ export default function GuessGrid({
               <ToggleSwitch checked={hardMode} onChange={onHardModeChange} disabled={hardModeLocked} />
             </div>
           </div>
+
+          {showStats && (
+            <>
+              <div className="w-full space-y-1 rounded-md border border-foreground/10 px-3 py-2 text-sm text-foreground">
+                <p>
+                  Word: {currentWordNumber}/{totalWords}
+                </p>
+                <p>Solved: {solvedCount}</p>
+                <p>Failed: {failedCount}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={onPlayNextWord}
+                disabled={!isGameOver}
+                className="w-full rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isLastWord ? 'Start Over!' : 'Play Next Word'}
+              </button>
+            </>
+          )}
         </div>
 
-        {/* Guess-rows column — error message now lives inside here, so it's
-            always aligned to this column's own width, not the whole panel. */}
         <div className={`border-foreground/10 ${isWide ? 'border-l pl-8' : 'border-t pt-4'}`}>
           <div className="space-y-1">
             {Array.from({ length: numGuesses }, (_, i) => renderRow(i))}

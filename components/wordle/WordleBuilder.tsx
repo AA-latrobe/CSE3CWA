@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
 import PhonemeKeypad from '@/components/shared/PhonemeKeypad';
 import Stepper from '@/components/shared/Stepper';
@@ -32,45 +32,69 @@ interface SubmittedGuess {
 export default function WordleBuilder() {
   const [numGuesses, setNumGuesses] = useState(6);
   const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>([DEFAULT_SELECTED_ENTRY]);
-  const [resetSignal, setResetSignal] = useState(0);
+
+  // Bumped by BOTH Reset Game and Play Next Word/Start Over — the single
+  // explicit signal that "a new game is starting," independent of whether
+  // the target word actually changed (it won't, in a single-word list).
+  const [gameSignal, setGameSignal] = useState(0);
 
   const isPlayable = selectedWords.length > 0;
-  const previewWord = selectedWords[0];
+
+  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [solvedCount, setSolvedCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
+
+  const previewWord = selectedWords[currentWordIndex];
   const wordSize = previewWord?.phonemes.length ?? 5;
+  const isLastWord = currentWordIndex >= selectedWords.length - 1;
 
   const [currentGuess, setCurrentGuess] = useState<string[]>([]);
   const [submittedGuesses, setSubmittedGuesses] = useState<SubmittedGuess[]>([]);
   const [hardMode, setHardMode] = useState(false);
   const [hardModeError, setHardModeError] = useState<string | null>(null);
+  const hasCountedResult = useRef(false);
 
-  // Reset gameplay whenever the target word changes, or Reset Game is clicked.
+  // Selected Words list itself changed shape — invalidates any in-progress
+  // multi-word run, so start over cleanly.
   useEffect(() => {
-  setCurrentGuess([]);
-  setSubmittedGuesses([]);
-  setHardModeError(null);
-  }, [previewWord?.word, numGuesses, resetSignal]);
+    setCurrentWordIndex(0);
+    setSolvedCount(0);
+    setFailedCount(0);
+  }, [selectedWords]);
 
-  // Clear any stale Hard Mode error message as soon as the guess itself changes.
+  // Reset the CURRENT word's gameplay whenever the target word changes,
+  // Number of Guesses changes, or a new game explicitly starts (gameSignal).
   useEffect(() => {
+    setCurrentGuess([]);
+    setSubmittedGuesses([]);
     setHardModeError(null);
-  }, [currentGuess]);
+    hasCountedResult.current = false;
+  }, [previewWord?.word, numGuesses, gameSignal]);
 
   const isSolved =
     submittedGuesses.length > 0 &&
     submittedGuesses[submittedGuesses.length - 1].colors.every((c) => c === 'green');
   const isOutOfGuesses = submittedGuesses.length >= numGuesses;
-  const isGameActive = isPlayable && !isSolved && !isOutOfGuesses;
+  const isGameOver = isSolved || isOutOfGuesses;
+  const isGameActive = isPlayable && !isGameOver;
   const canSubmit = isGameActive && currentGuess.length === wordSize;
   const hardModeLocked = submittedGuesses.length > 0;
 
   const letterColors = computeKeypadColors(submittedGuesses);
-  const hardModeConstraints = useMemo(
-    () => computeHardModeConstraints(submittedGuesses),
-    [submittedGuesses]
-  );
+  const hardModeConstraints = computeHardModeConstraints(submittedGuesses);
+
+  // Tally the moment THIS word's game ends, exactly once per game.
+  useEffect(() => {
+    if (isGameOver && !hasCountedResult.current) {
+      hasCountedResult.current = true;
+      if (isSolved) setSolvedCount((n) => n + 1);
+      else setFailedCount((n) => n + 1);
+    }
+  }, [isGameOver, isSolved]);
 
   const handleResetGame = () => {
-    setResetSignal((n) => n + 1);
+    if (isGameOver) return; // also enforced via disabled button, belt-and-suspenders
+    setGameSignal((n) => n + 1);
   };
 
   const handlePreviewSelect = (symbol: string) => {
@@ -92,13 +116,28 @@ export default function WordleBuilder() {
       const error = validateHardMode(currentGuess, hardModeConstraints);
       if (error) {
         setHardModeError(error);
-        return; // guess stays as-is so the user can fix it, not cleared
+        return;
       }
     }
 
     const colors = computeWordleColors(currentGuess, previewWord.phonemes);
     setSubmittedGuesses((prev) => [...prev, { symbols: currentGuess, colors }]);
     setCurrentGuess([]);
+  };
+
+  const handlePlayNextWord = () => {
+    if (!isGameOver) return;
+
+    if (isLastWord) {
+      setCurrentWordIndex(0);
+      setSolvedCount(0);
+      setFailedCount(0);
+    } else {
+      setCurrentWordIndex((i) => i + 1);
+    }
+    // Always bump gameSignal — this is what guarantees the board resets
+    // even when previewWord?.word doesn't change (single-word list case).
+    setGameSignal((n) => n + 1);
   };
 
   return (
@@ -136,7 +175,7 @@ export default function WordleBuilder() {
         </div>
 
         <div className="flex justify-center" style={{ marginBottom: 44 }}>
-          <PhonemeGameTitle phonemes={PREVIEW_TITLE_PHONEMES} resetSignal={resetSignal} />
+          <PhonemeGameTitle phonemes={PREVIEW_TITLE_PHONEMES} resetSignal={gameSignal} />
         </div>
 
         {!isPlayable && (
@@ -153,10 +192,19 @@ export default function WordleBuilder() {
               currentGuess={currentGuess}
               submittedGuesses={submittedGuesses}
               onResetGame={handleResetGame}
+              resetGameDisabled={isGameOver}
               hardMode={hardMode}
               onHardModeChange={setHardMode}
               hardModeLocked={hardModeLocked}
               hardModeError={hardModeError}
+              showStats={isPlayable}
+              totalWords={selectedWords.length}
+              currentWordNumber={currentWordIndex + 1}
+              solvedCount={solvedCount}
+              failedCount={failedCount}
+              isGameOver={isGameOver}
+              isLastWord={isLastWord}
+              onPlayNextWord={handlePlayNextWord}
             />
           </div>
 

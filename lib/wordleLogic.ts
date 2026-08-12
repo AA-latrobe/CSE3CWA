@@ -1,14 +1,5 @@
 export type CellColor = 'green' | 'yellow' | 'grey';
 
-// Standard Wordle duplicate-letter algorithm:
-// 1. Mark exact-position matches green first.
-// 2. For everything left over, count how many of each symbol remain
-//    in the target (excluding already-green positions).
-// 3. Walk the guess left-to-right; if a non-green symbol still has
-//    remaining count in the target, mark it yellow and consume one
-//    from that count — this is what naturally gives "only the first
-//    x duplicates go yellow" when the guess has more copies of a
-//    letter than the target does.
 export function computeWordleColors(guess: string[], target: string[]): CellColor[] {
   const colors: CellColor[] = guess.map(() => 'grey');
   const remaining: Record<string, number> = {};
@@ -32,10 +23,9 @@ export function computeWordleColors(guess: string[], target: string[]): CellColo
   return colors;
 }
 
-// Best color seen for each symbol across all submitted guesses so far.
-// Priority: green beats yellow beats grey — e.g. if 'æ' was yellow in an
-// earlier guess and green in a later one, it should show green now.
-export function computeKeypadColors(guesses: { symbols: string[]; colors: CellColor[] }[]) {
+export function computeKeypadColors(
+  guesses: { symbols: string[]; colors: CellColor[] }[]
+): Record<string, CellColor> {
   const priority: Record<CellColor, number> = { grey: 0, yellow: 1, green: 2 };
   const best: Record<string, CellColor> = {};
 
@@ -48,5 +38,66 @@ export function computeKeypadColors(guesses: { symbols: string[]; colors: CellCo
     });
   }
 
-  return best; // Record<string, CellColor>
+  return best;
+}
+
+export interface HardModeConstraints {
+  greenPositions: Record<number, string>;
+  minCounts: Record<string, number>;
+}
+
+// Aggregates every clue revealed across all submitted guesses into the
+// strictest set of requirements the next guess must satisfy.
+export function computeHardModeConstraints(
+  guesses: { symbols: string[]; colors: CellColor[] }[]
+): HardModeConstraints {
+  const greenPositions: Record<number, string> = {};
+  const minCounts: Record<string, number> = {};
+
+  for (const guess of guesses) {
+    const countsThisGuess: Record<string, number> = {};
+
+    guess.symbols.forEach((symbol, i) => {
+      const color = guess.colors[i];
+      if (color === 'green') {
+        greenPositions[i] = symbol;
+      }
+      if (color === 'green' || color === 'yellow') {
+        countsThisGuess[symbol] = (countsThisGuess[symbol] ?? 0) + 1;
+      }
+    });
+
+    // Take the max seen in any single guess — e.g. if one earlier guess
+    // revealed two yellow/green 'l's, the next guess must include at
+    // least two, even if a different guess only showed one.
+    for (const symbol of Object.keys(countsThisGuess)) {
+      minCounts[symbol] = Math.max(minCounts[symbol] ?? 0, countsThisGuess[symbol]);
+    }
+  }
+
+  return { greenPositions, minCounts };
+}
+
+// Returns null if the guess satisfies every constraint, otherwise a
+// human-readable message describing the first violation found.
+export function validateHardMode(guess: string[], constraints: HardModeConstraints): string | null {
+  for (const [indexStr, symbol] of Object.entries(constraints.greenPositions)) {
+    const index = Number(indexStr);
+    if (guess[index] !== symbol) {
+      return `Hard Mode: position ${index + 1} must be "${symbol}"`;
+    }
+  }
+
+  const guessCounts: Record<string, number> = {};
+  guess.forEach((symbol) => {
+    guessCounts[symbol] = (guessCounts[symbol] ?? 0) + 1;
+  });
+
+  for (const [symbol, minCount] of Object.entries(constraints.minCounts)) {
+    if ((guessCounts[symbol] ?? 0) < minCount) {
+      return `Hard Mode: guess must include "${symbol}"`;
+    }
+  }
+
+  return null;
 }

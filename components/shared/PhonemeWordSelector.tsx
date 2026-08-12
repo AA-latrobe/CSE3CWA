@@ -314,7 +314,12 @@ export default function PhonemeWordSelector({
           onBackspace={handleBackspace}
           usedSymbols={usedSymbols}
         />
-        <div className="mt-6 flex w-full justify-center">{footerSlot}</div>
+        <div
+          className="flex w-full justify-center"
+          style={{ marginTop: ROW_HEIGHT_PX * 2 + 24 }} // two list-rows' worth of space now, instead of one
+        >
+          {footerSlot}
+        </div>
       </div>
     </div>
   );

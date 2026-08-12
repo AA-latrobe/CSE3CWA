@@ -1,12 +1,18 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
 import PhonemeKeypad from '@/components/shared/PhonemeKeypad';
 import Stepper from '@/components/shared/Stepper';
 import PhonemeGameTitle from './PhonemeGameTitle';
 import PhonemeWordDisplay from './PhonemeWordDisplay';
-import GuessRow from './GuessRow';
-import { computeWordleColors, computeKeypadColors, CellColor } from '@/lib/wordleLogic';
+import GuessGrid from './GuessGrid';
+import {
+  computeWordleColors,
+  computeKeypadColors,
+  computeHardModeConstraints,
+  validateHardMode,
+  CellColor,
+} from '@/lib/wordleLogic';
 import {
   KEYPAD_TOP,
   KEYPAD_BOTTOM,
@@ -29,19 +35,25 @@ export default function WordleBuilder() {
   const [resetSignal, setResetSignal] = useState(0);
 
   const isPlayable = selectedWords.length > 0;
-  const previewWord = selectedWords[0]; // first word in the list — the current word being guessed
+  const previewWord = selectedWords[0];
   const wordSize = previewWord?.phonemes.length ?? 5;
 
   const [currentGuess, setCurrentGuess] = useState<string[]>([]);
   const [submittedGuesses, setSubmittedGuesses] = useState<SubmittedGuess[]>([]);
-
-  const letterColors = computeKeypadColors(submittedGuesses);
+  const [hardMode, setHardMode] = useState(false);
+  const [hardModeError, setHardModeError] = useState<string | null>(null);
 
   // Reset gameplay whenever the target word changes, or Reset Game is clicked.
   useEffect(() => {
-    setCurrentGuess([]);
-    setSubmittedGuesses([]);
-  }, [previewWord?.word, resetSignal]);
+  setCurrentGuess([]);
+  setSubmittedGuesses([]);
+  setHardModeError(null);
+  }, [previewWord?.word, numGuesses, resetSignal]);
+
+  // Clear any stale Hard Mode error message as soon as the guess itself changes.
+  useEffect(() => {
+    setHardModeError(null);
+  }, [currentGuess]);
 
   const isSolved =
     submittedGuesses.length > 0 &&
@@ -49,9 +61,16 @@ export default function WordleBuilder() {
   const isOutOfGuesses = submittedGuesses.length >= numGuesses;
   const isGameActive = isPlayable && !isSolved && !isOutOfGuesses;
   const canSubmit = isGameActive && currentGuess.length === wordSize;
+  const hardModeLocked = submittedGuesses.length > 0;
+
+  const letterColors = computeKeypadColors(submittedGuesses);
+  const hardModeConstraints = useMemo(
+    () => computeHardModeConstraints(submittedGuesses),
+    [submittedGuesses]
+  );
 
   const handleResetGame = () => {
-    setResetSignal((n) => n + 1); // re-triggers title animation AND clears guesses (see effect above)
+    setResetSignal((n) => n + 1);
   };
 
   const handlePreviewSelect = (symbol: string) => {
@@ -68,6 +87,15 @@ export default function WordleBuilder() {
 
   const handleEnter = () => {
     if (!canSubmit || !previewWord) return;
+
+    if (hardMode) {
+      const error = validateHardMode(currentGuess, hardModeConstraints);
+      if (error) {
+        setHardModeError(error);
+        return; // guess stays as-is so the user can fix it, not cleared
+      }
+    }
+
     const colors = computeWordleColors(currentGuess, previewWord.phonemes);
     setSubmittedGuesses((prev) => [...prev, { symbols: currentGuess, colors }]);
     setCurrentGuess([]);
@@ -107,15 +135,8 @@ export default function WordleBuilder() {
           <PhonemeWordDisplay phonemes={previewWord?.phonemes ?? []} isPlayable={isPlayable} />
         </div>
 
-        <div className="mb-6 flex flex-col items-center gap-4">
+        <div className="flex justify-center" style={{ marginBottom: 44 }}>
           <PhonemeGameTitle phonemes={PREVIEW_TITLE_PHONEMES} resetSignal={resetSignal} />
-          <button
-            type="button"
-            onClick={handleResetGame}
-            className="rounded-md border border-foreground/20 px-3 py-1.5 text-sm font-medium text-foreground hover:bg-foreground/5"
-          >
-            Reset Game
-          </button>
         </div>
 
         {!isPlayable && (
@@ -125,18 +146,18 @@ export default function WordleBuilder() {
         )}
 
         <div className="flex flex-col gap-8 md:flex-row md:items-start md:gap-8">
-          <div className="w-full max-w-[420px]">
-            <div className="space-y-1">
-              {Array.from({ length: numGuesses }).map((_, rowIndex) => {
-                const submitted = submittedGuesses[rowIndex];
-                const isCurrentRow = rowIndex === submittedGuesses.length;
-                const symbols = submitted ? submitted.symbols : isCurrentRow ? currentGuess : [];
-                const colors = submitted ? submitted.colors : null;
-                return (
-                  <GuessRow key={rowIndex} wordSize={wordSize} symbols={symbols} colors={colors} />
-                );
-              })}
-            </div>
+          <div className="min-w-0 w-full md:max-w-[600px] md:flex-1">
+            <GuessGrid
+              numGuesses={numGuesses}
+              wordSize={wordSize}
+              currentGuess={currentGuess}
+              submittedGuesses={submittedGuesses}
+              onResetGame={handleResetGame}
+              hardMode={hardMode}
+              onHardModeChange={setHardMode}
+              hardModeLocked={hardModeLocked}
+              hardModeError={hardModeError}
+            />
           </div>
 
           <div className="min-w-0 flex-1">

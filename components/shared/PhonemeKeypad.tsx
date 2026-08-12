@@ -99,7 +99,7 @@ export default function PhonemeKeypad({
             type="button"
             disabled={disabled}
             onClick={onBackspace}
-            className="w-full rounded-md bg-key px-3 py-2 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full rounded-md bg-partial px-3 py-2 text-sm font-medium text-partial-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ⌫ Backspace
           </button>

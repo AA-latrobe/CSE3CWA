@@ -2,23 +2,30 @@ import { WORD_LIST, PhonemeWordEntry, DEFAULT_SELECTED_ENTRY } from './phonemeDa
 import { getCookie, setCookie } from './cookies';
 
 const STORAGE_KEY = 'wordsearch_progress';
+const DEFAULT_GRID_SIZE = 10;
 
 interface StoredWordSearchState {
   selectedWords: string[];
+  gridSize: number;
+  scrollY: number;
 }
 
 export interface WordSearchState {
   selectedWords: PhonemeWordEntry[];
+  gridSize: number;
+  scrollY: number;
 }
 
 export function saveWordSearchState(state: WordSearchState) {
   const toStore: StoredWordSearchState = {
     selectedWords: state.selectedWords.map((w) => w.word),
+    gridSize: state.gridSize,
+    scrollY: state.scrollY,
   };
   try {
     setCookie(STORAGE_KEY, JSON.stringify(toStore));
   } catch {
-    // fail silently — same fallback behavior as Wordle's storage
+    // fail silently
   }
 }
 
@@ -33,12 +40,23 @@ function loadWordSearchState(): WordSearchState | null {
       .filter((w): w is PhonemeWordEntry => Boolean(w));
 
     if (selectedWords.length === 0) return null;
-    return { selectedWords };
+
+    return {
+      selectedWords,
+      gridSize: parsed.gridSize ?? DEFAULT_GRID_SIZE,
+      scrollY: parsed.scrollY ?? 0,
+    };
   } catch {
     return null;
   }
 }
 
 export function getInitialWordSearchState(): WordSearchState {
-  return loadWordSearchState() ?? { selectedWords: [DEFAULT_SELECTED_ENTRY] };
+  return (
+    loadWordSearchState() ?? {
+      selectedWords: [DEFAULT_SELECTED_ENTRY],
+      gridSize: DEFAULT_GRID_SIZE,
+      scrollY: 0,
+    }
+  );
 }

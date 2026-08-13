@@ -15,12 +15,6 @@ const VALID_VIEWS: View[] = ['home', 'wordle', 'wordsearch', 'about', 'settings'
 
 export default function Home() {
   const [activeView, setActiveView] = useState<View>('home');
-  // State, not a ref — this is the fix. A ref's value can be mutated
-  // synchronously mid-batch, so a later effect reading it that same tick
-  // sees "already true" while the sibling state update (setActiveView)
-  // it's meant to guard against hasn't actually applied yet. State
-  // updates in the same batch are guaranteed to land together, so by the
-  // time hasHydrated flips, activeView has ALREADY been corrected too.
   const [hasHydrated, setHasHydrated] = useState(false);
 
   useEffect(() => {
@@ -35,6 +29,19 @@ export default function Home() {
     if (!hasHydrated) return;
     setCookie(ACTIVE_VIEW_COOKIE, activeView);
   }, [activeView, hasHydrated]);
+
+  // Always reset to top on every tab switch, unconditionally — including
+  // Wordle and Word Search. Without this, a tab that's never been
+  // scrolled before (its own saved scrollY is 0) has nothing telling the
+  // browser to leave wherever the PREVIOUS tab was scrolled to, which is
+  // what made one tab's position appear to "leak" into another. Wordle's
+  // and Word Search's own restore effects run asynchronously (they wait
+  // on document.fonts.ready before doing anything), so they reliably
+  // fire AFTER this synchronous reset and correctly override it back to
+  // the real saved position when one genuinely exists.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeView]);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-[1000px] flex-col bg-page-background">

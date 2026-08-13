@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useMemo } from 'react';
 import PhonemeKeypad from './PhonemeKeypad';
+import { useContainerWidth } from '@/lib/useContainerWidth';
 import {
   WORD_LIST,
   KEYPAD_TOP,
@@ -47,6 +48,7 @@ export default function PhonemeWordSelector({
   onSelectedWordsChange,
   footerSlot,
 }: Props) {
+  const { ref: rowRef, isWide: rowWide } = useContainerWidth<HTMLDivElement>(560);
   const [searchPhonemes, setSearchPhonemes] = useState<string[]>([]);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -171,8 +173,8 @@ export default function PhonemeWordSelector({
   };
 
   return (
-    <div className="flex flex-col gap-8 md:flex-row md:items-start md:gap-8">
-      <div className="flex w-full max-w-[360px] flex-col gap-6">
+    <div ref={rowRef} className={`flex gap-8 ${rowWide ? 'flex-row items-start' : 'flex-col items-stretch'}`}>
+      <div className="flex w-full max-w-[350px] flex-shrink-0 flex-col gap-6">
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">
             Search by Phoneme
@@ -183,7 +185,7 @@ export default function PhonemeWordSelector({
               return (
                 <div
                   key={i}
-                  className={`flex h-12 w-12 items-center justify-center rounded-md text-lg font-semibold ${
+                  className={`flex h-12 w-12 items-center justify-center rounded-md text-xl font-semibold ${
                     color === 'green'
                       ? 'bg-match text-match-foreground'
                       : color === 'yellow'
@@ -222,9 +224,7 @@ export default function PhonemeWordSelector({
                   {Array.from({ length: MAX_PHONEME_SLOTS }).map((_, i) => (
                     <span
                       key={i}
-                      className={`flex h-7 w-7 items-center justify-center rounded text-xs ${cellClass(
-                        colors[i]
-                      )}`}
+                      className={`flex h-7 w-7 items-center justify-center rounded text-sm ${cellClass(colors[i])}`}
                     >
                       {entry.phonemes[i] ?? ''}
                     </span>
@@ -262,7 +262,7 @@ export default function PhonemeWordSelector({
                     return (
                       <span
                         key={i}
-                        className={`flex h-7 w-7 items-center justify-center rounded text-xs ${
+                        className={`flex h-7 w-7 items-center justify-center rounded text-sm ${
                           symbol
                             ? 'bg-match font-semibold text-match-foreground'
                             : 'border border-foreground/20 text-foreground'
@@ -307,18 +307,16 @@ export default function PhonemeWordSelector({
       </div>
 
       <div className="min-w-0 flex-1">
-        <PhonemeKeypad
-          topGrid={KEYPAD_TOP}
-          bottomGrid={KEYPAD_BOTTOM}
-          onSelect={handleKeypadSelect}
-          onBackspace={handleBackspace}
-          usedSymbols={usedSymbols}
-        />
-        <div
-          className="flex w-full justify-center"
-          style={{ marginTop: ROW_HEIGHT_PX * 2 + 24 }} // two list-rows' worth of space now, instead of one
-        >
-          {footerSlot}
+        <div className="mt-8">
+          <PhonemeKeypad
+            topGrid={KEYPAD_TOP}
+            bottomGrid={KEYPAD_BOTTOM}
+            onSelect={handleKeypadSelect}
+            onBackspace={handleBackspace}
+            usedSymbols={usedSymbols}
+            align="center"
+          />
+          <div className="mt-12 flex w-full justify-center">{footerSlot}</div>
         </div>
       </div>
     </div>

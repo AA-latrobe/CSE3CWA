@@ -14,9 +14,10 @@ type Props = {
   showEnter?: boolean;
   canSubmit?: boolean;
   onEnter?: () => void;
+  align?: 'start' | 'center';
 };
 
-const SIDE_BY_SIDE_THRESHOLD = 420;
+const SIDE_BY_SIDE_THRESHOLD = 340;
 
 function keyColorClass(symbol: string, usedSymbols?: Set<string>, letterColors?: Record<string, CellColor>) {
   const color = letterColors?.[symbol];
@@ -38,6 +39,7 @@ export default function PhonemeKeypad({
   showEnter,
   canSubmit,
   onEnter,
+  align = 'start',
 }: Props) {
   const { ref, isWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
 
@@ -52,7 +54,7 @@ export default function PhonemeKeypad({
               disabled={disabled}
               title={getPhonemeHoverText(symbol)}
               onClick={() => onSelect(symbol)}
-              className={`flex h-10 w-10 items-center justify-center rounded-md text-sm font-medium hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${keyColorClass(
+              className={`flex h-10 w-10 items-center justify-center rounded-md text-base font-medium hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${keyColorClass(
                 symbol,
                 usedSymbols,
                 letterColors
@@ -71,8 +73,10 @@ export default function PhonemeKeypad({
   return (
     <div ref={ref} className="w-full">
       <div
-        className={`flex gap-y-4 gap-x-8 ${
-          isWide ? 'flex-row items-start justify-center' : 'flex-col items-center'
+        className={`flex gap-y-4 gap-x-4 ${
+          isWide
+            ? `flex-row items-start ${align === 'center' ? 'justify-center' : 'justify-start'}`
+            : 'flex-col items-center'
         }`}
       >
         <div className="flex flex-col items-center gap-3">
@@ -89,11 +93,7 @@ export default function PhonemeKeypad({
           )}
         </div>
 
-        <div
-          className={`flex flex-col items-center gap-3 border-foreground/10 ${
-            isWide ? 'border-l pl-8' : 'border-t pt-4'
-          }`}
-        >
+        <div className="flex flex-col items-center gap-3">
           {renderGrid(bottomGrid, 'bottom')}
           <button
             type="button"

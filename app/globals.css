@@ -14,6 +14,8 @@
   --match-foreground: #ffffff;
   --partial: #c9b458;
   --partial-foreground: #ffffff;
+  --word-reveal: #a8dced;
+  --word-reveal-foreground: #111111;
 }
 
 .dark {
@@ -28,6 +30,8 @@
   --match-foreground: #ffffff;
   --partial: #b59f3b;
   --partial-foreground: #ffffff;
+  --word-reveal: #a8dced;
+  --word-reveal-foreground: #111111;
 }
 
 @theme inline {
@@ -44,6 +48,8 @@
   --color-partial-foreground: var(--partial-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --color-word-reveal: var(--word-reveal);
+  --color-word-reveal-foreground: var(--word-reveal-foreground);
 }
 
 @keyframes tile-flip {

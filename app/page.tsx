@@ -13,7 +13,7 @@ export default function Home() {
   const [activeView, setActiveView] = useState<View>('wordle');
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-7xl flex-col">
+    <div className="mx-auto flex min-h-screen max-w-[1000px] flex-col">
       <Header />
       <div className="flex items-center justify-between border-b border-foreground/10 px-4 py-2 sm:px-6">
         <NavBar activeView={activeView} onChange={setActiveView} />

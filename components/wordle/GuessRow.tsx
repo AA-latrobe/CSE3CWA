@@ -85,7 +85,7 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
           <div key={i} style={{ perspective: '400px' }}>
             <div
               title={symbol ? getPhonemeHoverText(symbol) : undefined}
-              className={`flex h-12 w-12 items-center justify-center rounded-md text-lg font-semibold ${cellClass(
+              className={`flex h-12 w-12 items-center justify-center rounded-md text-xl font-semibold ${cellClass(
                 displayColors[i]
               )} ${flipping[i] ? 'animate-tile-flip' : ''}`}
             >

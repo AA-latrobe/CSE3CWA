@@ -100,7 +100,7 @@ export default function PhonemeGameTitle({ phonemes, resetSignal }: Props) {
         <div key={i} style={{ perspective: '400px' }}>
           <div
             title={getPhonemeHoverText(symbol)}
-            className={`flex h-16 w-16 items-center justify-center rounded-md text-2xl font-semibold transition-colors ${cellColorClass(
+            className={`flex h-16 w-16 items-center justify-center rounded-md text-3xl font-semibold transition-colors ${cellColorClass(
               colors[i]
             )} ${flipping[i] ? 'animate-tile-flip' : ''}`}
           >

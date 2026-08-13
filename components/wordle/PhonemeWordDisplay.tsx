@@ -105,7 +105,7 @@ export default function PhonemeWordDisplay({ phonemes, isPlayable }: Props) {
       {displaySlots.map((slot, i) => (
         <div key={i} style={{ perspective: '400px' }}>
           <div
-            className={`flex h-7 w-7 items-center justify-center rounded text-xs font-semibold ${slotClass(
+            className={`flex h-7 w-7 items-center justify-center rounded text-sm font-semibold ${slotClass(
               slot.color
             )} ${flipping[i] ? 'animate-tile-flip' : ''}`}
           >

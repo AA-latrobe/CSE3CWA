@@ -6,6 +6,8 @@ import Stepper from '@/components/shared/Stepper';
 import PhonemeGameTitle from './PhonemeGameTitle';
 import PhonemeWordDisplay from './PhonemeWordDisplay';
 import GuessGrid from './GuessGrid';
+import { useContainerWidth } from '@/lib/useContainerWidth';
+import { useTheme } from '@/context/ThemeContext';
 import {
   computeWordleColors,
   computeKeypadColors,
@@ -34,6 +36,8 @@ interface SubmittedGuess {
 }
 
 export default function WordleBuilder() {
+  const { ref: previewRowRef, isWide: previewRowWide } = useContainerWidth<HTMLDivElement>(700);
+  const { theme } = useTheme();
   const [numGuesses, setNumGuesses] = useState(6);
   const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>([DEFAULT_SELECTED_ENTRY]);
   const [gameSignal, setGameSignal] = useState(0);
@@ -128,11 +132,6 @@ useEffect(() => {
 
   const completionMessage = computeCompletionMessage(isSolved, submittedGuesses.length, numGuesses);
 
-  const handleResetGame = () => {
-    if (isGameOver) return;
-    setGameSignal((n) => n + 1);
-  };
-
   const handlePreviewSelect = (symbol: string) => {
     if (!isGameActive) return;
     if (currentGuess.length >= wordSize) return;
@@ -211,52 +210,61 @@ useEffect(() => {
           <PhonemeGameTitle phonemes={PREVIEW_TITLE_PHONEMES} resetSignal={gameSignal} />
         </div>
 
+        <p className="text-center text-sm text-foreground/70" style={{ marginBottom: 44 }}>
+          A Phoneme Word Guessing Game
+        </p>
+
         {!isPlayable && (
           <p className="mb-4 text-sm text-amber-500">
             Preview is not playable yet — select at least one word above.
           </p>
         )}
 
-        <div className="flex flex-col gap-8 md:flex-row md:items-start md:gap-8">
-          <div className="min-w-0 w-full md:max-w-[600px] md:flex-1">
-            <GuessGrid
-              numGuesses={numGuesses}
-              wordSize={wordSize}
-              currentGuess={currentGuess}
-              submittedGuesses={submittedGuesses}
-              onResetGame={handleResetGame}
-              resetGameDisabled={isGameOver}
-              hardMode={hardMode}
-              onHardModeChange={setHardMode}
-              hardModeLocked={hardModeLocked}
-              hardModeError={hardModeError}
-              showStats={isPlayable}
-              totalWords={selectedWords.length}
-              currentWordNumber={currentWordIndex + 1}
-              solvedCount={solvedCount}
-              failedCount={failedCount}
-              isGameOver={isGameOver}
-              isLastWord={isLastWord}
-              onPlayNextWord={handlePlayNextWord}
-              solutionPhonemes={previewWord?.phonemes ?? []}
-              solutionEnglishWord={previewWord?.word ?? ''}
-              solutionMessage={completionMessage}
-              solutionRevealed={solutionRevealed}
-            />
-          </div>
+        <div className="mx-auto w-full max-w-[1040px]">
+          <div
+            ref={previewRowRef}
+            className={`flex gap-6 ${previewRowWide ? 'flex-row items-start' : 'flex-col items-stretch'}`}
+          >
+            <div className="flex-shrink-0">
+              <GuessGrid
+                isWide={previewRowWide}
+                numGuesses={numGuesses}
+                wordSize={wordSize}
+                currentGuess={currentGuess}
+                submittedGuesses={submittedGuesses}
+                hardMode={hardMode}
+                onHardModeChange={setHardMode}
+                hardModeLocked={hardModeLocked}
+                hardModeError={hardModeError}
+                isDarkTheme={theme === 'dark'}
+                showStats={isPlayable}
+                totalWords={selectedWords.length}
+                currentWordNumber={currentWordIndex + 1}
+                solvedCount={solvedCount}
+                failedCount={failedCount}
+                isGameOver={isGameOver}
+                isLastWord={isLastWord}
+                onPlayNextWord={handlePlayNextWord}
+                solutionPhonemes={previewWord?.phonemes ?? []}
+                solutionEnglishWord={previewWord?.word ?? ''}
+                solutionMessage={completionMessage}
+                solutionRevealed={solutionRevealed}
+              />
+            </div>
 
-          <div className="min-w-0 flex-1">
-            <PhonemeKeypad
-              topGrid={KEYPAD_TOP}
-              bottomGrid={KEYPAD_BOTTOM}
-              onSelect={handlePreviewSelect}
-              onBackspace={handlePreviewBackspace}
-              disabled={!isPlayable}
-              letterColors={letterColors}
-              showEnter
-              canSubmit={canSubmit}
-              onEnter={handleEnter}
-            />
+            <div className="min-w-0 flex-1 pl-8">
+              <PhonemeKeypad
+                topGrid={KEYPAD_TOP}
+                bottomGrid={KEYPAD_BOTTOM}
+                onSelect={handlePreviewSelect}
+                onBackspace={handlePreviewBackspace}
+                disabled={!isPlayable}
+                letterColors={letterColors}
+                showEnter
+                canSubmit={canSubmit}
+                onEnter={handleEnter}
+              />
+            </div>
           </div>
         </div>
       </div>

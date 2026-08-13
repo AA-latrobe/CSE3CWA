@@ -21,6 +21,7 @@ type Props = {
   hardModeLocked: boolean;
   hardModeError?: string | null;
   isDarkTheme: boolean;
+  isHighContrast: boolean;
   showStats: boolean;
   totalWords: number;
   currentWordNumber: number;
@@ -54,6 +55,7 @@ export default function GuessGrid({
   hardModeLocked,
   hardModeError,
   isDarkTheme,
+  isHighContrast,
   showStats,
   totalWords,
   currentWordNumber,
@@ -96,6 +98,13 @@ export default function GuessGrid({
           <span className="whitespace-nowrap text-sm text-foreground">Dark Theme</span>
           <div className="flex-shrink-0">
             <ToggleSwitch checked={isDarkTheme} onChange={() => {}} disabled />
+          </div>
+        </div>
+
+        <div className="flex w-full items-center justify-between gap-3 rounded-md border border-foreground/10 px-3 py-2">
+          <span className="whitespace-nowrap text-sm text-foreground">High Contrast</span>
+          <div className="flex-shrink-0">
+            <ToggleSwitch checked={isHighContrast} onChange={() => {}} disabled />
           </div>
         </div>
 

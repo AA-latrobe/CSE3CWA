@@ -37,7 +37,7 @@ interface SubmittedGuess {
 
 export default function WordleBuilder() {
   const { ref: previewRowRef, isWide: previewRowWide } = useContainerWidth<HTMLDivElement>(700);
-  const { theme } = useTheme();
+  const { theme, highContrast } = useTheme();
   const [numGuesses, setNumGuesses] = useState(6);
   const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>([DEFAULT_SELECTED_ENTRY]);
   const [gameSignal, setGameSignal] = useState(0);
@@ -237,6 +237,7 @@ useEffect(() => {
                 hardModeLocked={hardModeLocked}
                 hardModeError={hardModeError}
                 isDarkTheme={theme === 'dark'}
+                isHighContrast={highContrast}
                 showStats={isPlayable}
                 totalWords={selectedWords.length}
                 currentWordNumber={currentWordIndex + 1}

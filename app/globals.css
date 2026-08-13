@@ -36,6 +36,16 @@
   --page-background: #000000; /* pure black, distinct from panel's dark grey */
 }
 
+.high-contrast {
+  --match: #f5793a;
+  --match-foreground: #111111;
+  --partial: #85c0f9;
+  --partial-foreground: #111111;
+  --accent: #f5793a;
+  --word-reveal: #b980f0; /* suggested high-contrast replacement — distinct from orange/blue */
+  --word-reveal-foreground: #111111;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

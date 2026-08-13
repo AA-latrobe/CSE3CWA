@@ -175,7 +175,7 @@ useEffect(() => {
 
   return (
     <div className="space-y-8">
-      <div className="rounded-md border border-foreground/10 bg-foreground/5 p-4 text-sm text-foreground/80">
+      <div className="rounded-md border border-foreground/10 bg-background p-4 text-sm text-foreground/80">
         <p>
           Configure a phoneme-based Wordle activity below. Search the word list using
           the phoneme keypad, add words to your selection, then preview the activity.
@@ -183,7 +183,7 @@ useEffect(() => {
         </p>
       </div>
 
-      <div className="rounded-md border border-foreground/10 p-4 sm:p-6">
+      <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
         <h2 className="mb-6 text-lg font-semibold text-foreground">Configure Activity</h2>
         <PhonemeWordSelector
           selectedWords={selectedWords}
@@ -200,7 +200,7 @@ useEffect(() => {
         />
       </div>
 
-      <div className="rounded-md border border-foreground/10 p-4 sm:p-6">
+      <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">Preview</h2>
           <PhonemeWordDisplay phonemes={previewWord?.phonemes ?? []} isPlayable={isPlayable} />

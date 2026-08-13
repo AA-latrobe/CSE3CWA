@@ -7,12 +7,14 @@ export default function SettingsPanel() {
   const isDark = theme === 'dark';
 
   return (
-    <div className="max-w-md">
-      <h2 className="mb-4 text-lg font-semibold text-foreground">Settings</h2>
+    <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
+      <h2 className="mb-6 text-lg font-semibold text-foreground">Settings</h2>
 
-      <div className="flex items-center justify-between rounded-md border border-foreground/10 p-4">
+      <div className="inline-flex items-center gap-6 rounded-md border border-foreground/10 px-3 py-2">
         <span className="text-foreground">Dark Theme</span>
-        <ToggleSwitch checked={isDark} onChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
+        <div className="flex-shrink-0">
+          <ToggleSwitch checked={isDark} onChange={(checked) => setTheme(checked ? 'dark' : 'light')} />
+        </div>
       </div>
     </div>
   );

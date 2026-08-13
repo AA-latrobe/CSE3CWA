@@ -16,6 +16,7 @@
   --partial-foreground: #ffffff;
   --word-reveal: #a8dced;
   --word-reveal-foreground: #111111;
+  --page-background: #f3f4f6; /* light grey, distinct from panel white */
 }
 
 .dark {
@@ -32,6 +33,7 @@
   --partial-foreground: #ffffff;
   --word-reveal: #a8dced;
   --word-reveal-foreground: #111111;
+  --page-background: #000000; /* pure black, distinct from panel's dark grey */
 }
 
 @theme inline {
@@ -50,6 +52,7 @@
   --font-mono: var(--font-geist-mono);
   --color-word-reveal: var(--word-reveal);
   --color-word-reveal-foreground: var(--word-reveal-foreground);
+  --color-page-background: var(--page-background);
 }
 
 @keyframes tile-flip {
@@ -69,7 +72,7 @@
 }
 
 body {
-  background: var(--color-background);
+  background: var(--color-page-background);
   color: var(--color-foreground);
   font-family: Arial, Helvetica, sans-serif;
 }

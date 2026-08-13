@@ -1,4 +1,4 @@
-type View = 'wordle' | 'wordsearch' | 'about' | 'settings';
+type View = 'home' | 'wordle' | 'wordsearch' | 'about' | 'settings';
 
 type Props = {
   activeView: View;
@@ -7,6 +7,7 @@ type Props = {
 
 export default function NavBar({ activeView, onChange }: Props) {
   const tabs: { id: View; label: string }[] = [
+    { id: 'home', label: 'Home' },
     { id: 'wordle', label: 'Wordle' },
     { id: 'wordsearch', label: 'Word Search' },
   ];

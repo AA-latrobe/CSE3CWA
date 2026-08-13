@@ -1,12 +1,16 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useTheme } from '@/context/ThemeContext';
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
+import WordSearchGrid from './WordSearchGrid';
 import { PhonemeWordEntry } from '@/lib/phonemeData';
 import { getInitialWordSearchState, saveWordSearchState } from '@/lib/wordSearchStorage';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
 export default function WordSearchBuilder() {
+  const { theme, highContrast } = useTheme();
+
   const initialRef = useRef<ReturnType<typeof getInitialWordSearchState> | null>(null);
   if (initialRef.current === null) {
     initialRef.current = getInitialWordSearchState();
@@ -44,9 +48,7 @@ export default function WordSearchBuilder() {
 
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
         <h2 className="mb-6 text-lg font-semibold text-foreground">Preview</h2>
-        <p className="text-sm text-foreground/50">
-          [Word Search preview placeholder — grid, letters, and word list will appear here.]
-        </p>
+        <WordSearchGrid isDarkTheme={theme === 'dark'} isHighContrast={highContrast} />
       </div>
     </div>
   );

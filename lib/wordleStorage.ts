@@ -10,7 +10,7 @@ interface StoredSubmittedGuess {
 }
 
 interface StoredWordleState {
-  selectedWords: string[]; // word strings only — phonemes looked up from WORD_LIST
+  selectedWords: string[];
   numGuesses: number;
   currentWordIndex: number;
   solvedCount: number;
@@ -18,6 +18,7 @@ interface StoredWordleState {
   hardMode: boolean;
   currentGuess: string[];
   submittedGuesses: StoredSubmittedGuess[];
+  scrollY: number;
 }
 
 export interface WordleGameState {
@@ -29,6 +30,7 @@ export interface WordleGameState {
   hardMode: boolean;
   currentGuess: string[];
   submittedGuesses: StoredSubmittedGuess[];
+  scrollY: number;
 }
 
 export function saveWordleState(state: WordleGameState) {
@@ -41,12 +43,12 @@ export function saveWordleState(state: WordleGameState) {
     hardMode: state.hardMode,
     currentGuess: state.currentGuess,
     submittedGuesses: state.submittedGuesses,
+    scrollY: state.scrollY,
   };
   try {
     setCookie(STORAGE_KEY, JSON.stringify(toStore));
   } catch {
-    // Cookie write can fail (size limits, private browsing) — fail silently;
-    // the app just falls back to defaults on next load.
+    // Cookie write can fail (size limits, private browsing) — fail silently.
   }
 }
 
@@ -71,14 +73,13 @@ function loadWordleState(): WordleGameState | null {
       hardMode: parsed.hardMode,
       currentGuess: parsed.currentGuess ?? [],
       submittedGuesses: parsed.submittedGuesses ?? [],
+      scrollY: parsed.scrollY ?? 0,
     };
   } catch {
     return null;
   }
 }
 
-// Falls back to sensible defaults ("blank", word 1, no progress) if there's
-// no saved cookie, or it fails to parse.
 export function getInitialWordleState(): WordleGameState {
   return (
     loadWordleState() ?? {
@@ -90,8 +91,9 @@ export function getInitialWordleState(): WordleGameState {
       hardMode: false,
       currentGuess: [],
       submittedGuesses: [],
+      scrollY: 0,
     }
   );
 }
 
-export { deriveGameStatus }; // re-exported for convenience where this module is already imported
+export { deriveGameStatus };

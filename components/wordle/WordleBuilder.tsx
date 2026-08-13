@@ -1,4 +1,3 @@
-// components/wordle/WordleBuilder.tsx
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useTheme } from '@/context/ThemeContext';
@@ -36,10 +35,6 @@ export default function WordleBuilder() {
   const { theme, highContrast } = useTheme();
   const { ref: previewRowRef, isWide: previewRowWide } = useContainerWidth<HTMLDivElement>(700);
 
-  // Computed exactly once, on the very first render — since page.tsx only
-  // mounts this component when the Wordle tab is selected (never during
-  // SSR), reading the cookie synchronously here is safe: no server/client
-  // mismatch to worry about, unlike ThemeContext.
   const initialRef = useRef<ReturnType<typeof getInitialWordleState> | null>(null);
   if (initialRef.current === null) {
     initialRef.current = getInitialWordleState();
@@ -65,9 +60,6 @@ export default function WordleBuilder() {
   const [hardMode, setHardMode] = useState(initial.hardMode);
   const [hardModeError, setHardModeError] = useState<string | null>(null);
 
-  // Seeded from the RESTORED game's status — if the saved game was already
-  // finished, this prevents the tally effect below from re-counting a
-  // result that's already baked into solvedCount/failedCount.
   const hasCountedResult = useRef(
     deriveGameStatus(initial.submittedGuesses, initial.numGuesses).isGameOver
   );
@@ -75,13 +67,9 @@ export default function WordleBuilder() {
   const [solutionRevealed, setSolutionRevealed] = useState(false);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Compares against the ACTUAL last-seen value rather than a "have I run
-  // yet" boolean — safe against React Strict Mode's double effect
-  // invocation in development, which would otherwise consume a one-shot
-  // guard on its throwaway first pass and let the real pass wipe restored
-  // state. Both refs are seeded during render (not inside the effect), so
-  // the very first effect run — no matter how many times Strict Mode
-  // repeats it — always sees "nothing changed" and correctly skips.
+  const [scrollY, setScrollY] = useState(initial.scrollY);
+  const hasRestoredScroll = useRef(false);
+
   const prevSelectedWordsRef = useRef(selectedWords);
   const resetKeyRef = useRef(`${previewWord?.word}|${numGuesses}|${gameSignal}`);
 
@@ -127,9 +115,6 @@ export default function WordleBuilder() {
     }
   }, [submittedGuesses, numGuesses]);
 
-  // Schedules the solution reveal, with proper cleanup so a stale timer
-  // can never fire setSolutionRevealed after this component has unmounted
-  // (e.g. the user navigated away before the delay elapsed).
   useEffect(() => {
     const status = deriveGameStatus(submittedGuesses, numGuesses);
     if (status.isGameOver && revealTimer.current === null) {
@@ -150,10 +135,52 @@ export default function WordleBuilder() {
     };
   }, [submittedGuesses, numGuesses, wordSize]);
 
-  // Persist on every relevant change — this is what makes progress survive
-  // both a full page reload AND simply switching to another tab and back
-  // (since switching tabs unmounts this component, and mounting again
-  // re-reads the same cookie via getInitialWordleState above).
+  // Tracks scroll position continuously from the moment this component
+  // mounts — NOT gated by "has a guess been made yet." Gating it was the
+  // bug: a listener that only starts existing after the first guess
+  // misses whatever scrolling already happened to REACH that guess (e.g.
+  // scrolling down to click Enter). Tracking unconditionally means
+  // whatever position you're at is always already known the instant it
+  // becomes relevant to save.
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (initial.scrollY <= 0) return;
+    if (hasRestoredScroll.current) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const tryScroll = () => {
+      if (cancelled) return;
+      attempts++;
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (maxScroll >= initial.scrollY || attempts >= maxAttempts) {
+        window.scrollTo(0, initial.scrollY);
+        hasRestoredScroll.current = true;
+      } else {
+        requestAnimationFrame(tryScroll);
+      }
+    };
+
+    if (typeof document !== 'undefined' && 'fonts' in document) {
+      document.fonts.ready.then(() => {
+        if (!cancelled) requestAnimationFrame(tryScroll);
+      });
+    } else {
+      requestAnimationFrame(tryScroll);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     saveWordleState({
       selectedWords,
@@ -164,6 +191,7 @@ export default function WordleBuilder() {
       hardMode,
       currentGuess,
       submittedGuesses,
+      scrollY,
     });
   }, [
     selectedWords,
@@ -174,6 +202,7 @@ export default function WordleBuilder() {
     hardMode,
     currentGuess,
     submittedGuesses,
+    scrollY,
   ]);
 
   const completionMessage = computeCompletionMessage(isSolved, submittedGuesses.length, numGuesses);

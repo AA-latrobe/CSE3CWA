@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import PhonemeKeypad from './PhonemeKeypad';
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import {
@@ -9,13 +9,15 @@ import {
   MAX_PHONEME_SLOTS,
   PhonemeWordEntry,
 } from '@/lib/phonemeData';
+import { getCookie, setCookie } from '@/lib/cookies';
 
 type Props = {
-  // Now fully controlled — WordleBuilder (or WordSearchBuilder later) owns
-  // this state and passes it down. No internal duplicate copy anymore.
   selectedWords: PhonemeWordEntry[];
   onSelectedWordsChange: (words: PhonemeWordEntry[]) => void;
   footerSlot?: React.ReactNode;
+  // Lets different activity types (Wordle, Word Search) each remember
+  // their own search independently rather than sharing one cookie.
+  searchStorageKey?: string;
 };
 
 type CellColor = 'empty' | 'grey' | 'yellow' | 'green';
@@ -28,6 +30,7 @@ interface ListRow {
 
 const VISIBLE_ROWS = 5;
 const ROW_HEIGHT_PX = 44;
+const DEFAULT_SEARCH_STORAGE_KEY = 'wordle_search_phonemes';
 
 function cellClass(color: CellColor) {
   switch (color) {
@@ -43,15 +46,47 @@ function cellClass(color: CellColor) {
   }
 }
 
+function loadSearchPhonemes(storageKey: string): string[] {
+  const raw = getCookie(storageKey);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.every((s) => typeof s === 'string')) {
+      return parsed.slice(0, MAX_PHONEME_SLOTS);
+    }
+  } catch {
+    // fall through to empty
+  }
+  return [];
+}
+
 export default function PhonemeWordSelector({
   selectedWords,
   onSelectedWordsChange,
   footerSlot,
+  searchStorageKey = DEFAULT_SEARCH_STORAGE_KEY,
 }: Props) {
   const { ref: rowRef, isWide: rowWide } = useContainerWidth<HTMLDivElement>(560);
-  const [searchPhonemes, setSearchPhonemes] = useState<string[]>([]);
+
+  // Read once, synchronously, on first render — this component only ever
+  // mounts client-side (inside WordleBuilder, which itself only mounts
+  // when its tab is selected), so there's no server/client mismatch risk.
+  const initialSearchRef = useRef<string[] | null>(null);
+  if (initialSearchRef.current === null) {
+    initialSearchRef.current = loadSearchPhonemes(searchStorageKey);
+  }
+
+  const [searchPhonemes, setSearchPhonemes] = useState<string[]>(initialSearchRef.current);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      setCookie(searchStorageKey, JSON.stringify(searchPhonemes));
+    } catch {
+      // fail silently — search restore is a nice-to-have, not critical
+    }
+  }, [searchPhonemes, searchStorageKey]);
 
   const availableWords = useMemo(
     () => WORD_LIST.filter((w) => !selectedWords.some((s) => s.word === w.word)),

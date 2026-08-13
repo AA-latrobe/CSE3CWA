@@ -5,6 +5,7 @@ import NavBar from '@/components/NavBar';
 import HamburgerMenu from '@/components/HamburgerMenu';
 import Footer from '@/components/Footer';
 import WordleBuilder from '@/components/wordle/WordleBuilder';
+import WordSearchBuilder from '@/components/wordsearch/WordSearchBuilder';
 import SettingsPanel from '@/components/SettingsPanel';
 import { getCookie, setCookie } from '@/lib/cookies';
 
@@ -55,7 +56,7 @@ export default function Home() {
           </div>
         )}
         {activeView === 'wordle' && <WordleBuilder />}
-        {activeView === 'wordsearch' && <div>Word Search builder placeholder</div>}
+        {activeView === 'wordsearch' && <WordSearchBuilder />}
         {activeView === 'about' && <div>About placeholder</div>}
         {activeView === 'settings' && <SettingsPanel />}
       </main>

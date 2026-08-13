@@ -282,14 +282,16 @@ export default function WordleBuilder() {
                 max={MAX_GUESSES}
                 onChange={setNumGuesses}
               />
-              <button
-                type="button"
-                onClick={handleGeneratePage}
-                disabled={selectedWords.length === 0}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Generate Page
-              </button>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={handleGeneratePage}
+                  disabled={selectedWords.length === 0}
+                  className="rounded-md bg-word-reveal px-4 py-2 text-sm font-medium text-word-reveal-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Generate .html Puzzle Page
+                </button>
+              </div>
             </div>
           }
         />
@@ -305,9 +307,17 @@ export default function WordleBuilder() {
           <PhonemeGameTitle phonemes={PREVIEW_TITLE_PHONEMES} resetSignal={gameSignal} />
         </div>
 
-        <p className="text-center text-sm text-foreground/70" style={{ marginBottom: 44 }}>
+        <p className="text-center text-lg text-foreground/70" style={{ marginBottom: 44 }}>
           A Phoneme Word Guessing Game
         </p>
+
+        <div className="flex items-center justify-center gap-2 text-sm text-foreground/70" style={{ marginBottom: 44 }}>
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-match" />
+          <span>= Correct position</span>
+          <span className="mx-2 text-foreground/30">|</span>
+          <div className="flex h-7 w-7 items-center justify-center rounded bg-partial" />
+          <span>= In the word, but wrong position</span>
+        </div>
 
         {!isPlayable && (
           <p className="mb-4 text-sm text-amber-500">

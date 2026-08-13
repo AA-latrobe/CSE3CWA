@@ -97,7 +97,10 @@ body {
   font-size:1.875rem; font-weight:600; border:2px solid rgba(128,128,128,0.2); color: var(--foreground);
   perspective: 400px;
 }
-.subtitle { text-align:center; color: rgba(128,128,128,0.9); font-size:0.875rem; margin: 0 0 44px 0; }
+.subtitle { text-align:center; color: rgba(128,128,128,0.9); font-size:1.125rem; margin: 0 0 44px 0; }
+.legend { display:flex; align-items:center; justify-content:center; gap:8px; font-size:0.875rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
+.legend-swatch { width:28px; height:28px; border-radius:0.25rem; }
+.legend-sep { margin: 0 8px; color: rgba(128,128,128,0.5); }
 .game-row { display:flex; gap:24px; flex-wrap: wrap; }
 .controls-col { width:176px; flex-shrink:0; display:flex; flex-direction:column; gap:12px; }
 .control-box { border:1px solid rgba(128,128,128,0.15); border-radius:0.375rem; padding:8px 12px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -163,6 +166,13 @@ input:checked + .slider:before { transform: translateX(20px); }
 <div class="panel">
   <div class="title-row" id="titleRow"></div>
   <p class="subtitle">A Phoneme Word Guessing Game</p>
+  <div class="legend">
+    <div class="legend-swatch" style="background: var(--match);"></div>
+    <span>= Correct position</span>
+    <span class="legend-sep">|</span>
+    <div class="legend-swatch" style="background: var(--partial);"></div>
+    <span>= In the word, but wrong position</span>
+  </div>
   <div class="game-row">
     <div class="controls-col">
       <div>

@@ -21,6 +21,7 @@ import {
 } from '@/lib/wordleLogic';
 import { KEYPAD_TOP, KEYPAD_BOTTOM, PREVIEW_TITLE_PHONEMES, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getInitialWordleState, saveWordleState } from '@/lib/wordleStorage';
+import { downloadStandaloneWordleHtml } from '@/lib/wordleExport';
 
 const MIN_GUESSES = 3;
 const MAX_GUESSES = 10;
@@ -135,6 +136,10 @@ export default function WordleBuilder() {
     };
   }, [submittedGuesses, numGuesses, wordSize]);
 
+  useEffect(() => {
+    setHardModeError(null);
+  }, [currentGuess]);
+
   // Tracks scroll position continuously from the moment this component
   // mounts — NOT gated by "has a guess been made yet." Gating it was the
   // bug: a listener that only starts existing after the first guess
@@ -248,6 +253,11 @@ export default function WordleBuilder() {
     setGameSignal((n) => n + 1);
   };
 
+  const handleGeneratePage = () => {
+    if (selectedWords.length === 0) return;
+    downloadStandaloneWordleHtml(selectedWords, numGuesses);
+  };
+
   return (
     <div className="space-y-8">
       <div className="rounded-md border border-foreground/10 bg-background p-4 text-sm text-foreground/80">
@@ -264,13 +274,23 @@ export default function WordleBuilder() {
           selectedWords={selectedWords}
           onSelectedWordsChange={setSelectedWords}
           footerSlot={
-            <Stepper
-              label="Number of Guesses"
-              value={numGuesses}
-              min={MIN_GUESSES}
-              max={MAX_GUESSES}
-              onChange={setNumGuesses}
-            />
+            <div className="flex flex-col items-center gap-4">
+              <Stepper
+                label="Number of Guesses"
+                value={numGuesses}
+                min={MIN_GUESSES}
+                max={MAX_GUESSES}
+                onChange={setNumGuesses}
+              />
+              <button
+                type="button"
+                onClick={handleGeneratePage}
+                disabled={selectedWords.length === 0}
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Generate Page
+              </button>
+            </div>
           }
         />
       </div>

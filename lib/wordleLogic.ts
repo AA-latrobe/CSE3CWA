@@ -130,3 +130,18 @@ export function computeCompletionMessage(
       return guessesUsed === numGuesses ? 'Phew!' : 'Great!';
   }
 }
+
+export interface GameStatus {
+  isSolved: boolean;
+  isOutOfGuesses: boolean;
+  isGameOver: boolean;
+}
+
+export function deriveGameStatus(
+  guesses: { symbols: string[]; colors: CellColor[] }[],
+  numGuesses: number
+): GameStatus {
+  const isSolved = guesses.length > 0 && guesses[guesses.length - 1].colors.every((c) => c === 'green');
+  const isOutOfGuesses = guesses.length >= numGuesses;
+  return { isSolved, isOutOfGuesses, isGameOver: isSolved || isOutOfGuesses };
+}

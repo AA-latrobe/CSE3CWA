@@ -23,15 +23,30 @@ function cellClass(color: CellColor | null) {
 }
 
 export default function GuessRow({ wordSize, symbols, colors }: Props) {
-  const [displayColors, setDisplayColors] = useState<(CellColor | null)[]>(
-    Array(wordSize).fill(null)
+  const isFirstRender = useRef(true);
+
+  // If this row arrives already submitted (restored from a saved cookie),
+  // start with those colors already applied — no animation.
+  const [displayColors, setDisplayColors] = useState<(CellColor | null)[]>(() =>
+    colors ? colors : Array(wordSize).fill(null)
   );
   const [flipping, setFlipping] = useState<boolean[]>(Array(wordSize).fill(false));
-  const wasSubmitted = useRef(false);
+  const wasSubmitted = useRef(colors !== null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
     const isSubmitted = colors !== null;
+
+    // First render only: if already submitted, we've already painted the
+    // colors synchronously above — nothing to animate. Animating here
+    // would also be unsafe: Strict Mode's dev-only double-invoke of mount
+    // effects can cancel the scheduled timers before they ever fire,
+    // leaving the row stuck uncolored (the bug this guard fixes).
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      wasSubmitted.current = isSubmitted;
+      return;
+    }
 
     if (isSubmitted && !wasSubmitted.current) {
       timers.current.forEach(clearTimeout);
@@ -85,7 +100,7 @@ export default function GuessRow({ wordSize, symbols, colors }: Props) {
           <div key={i} style={{ perspective: '400px' }}>
             <div
               title={symbol ? getPhonemeHoverText(symbol) : undefined}
-              className={`flex h-12 w-12 items-center justify-center rounded-md text-xl font-semibold ${cellClass(
+              className={`flex h-12 w-12 items-center justify-center rounded-md text-lg font-semibold ${cellClass(
                 displayColors[i]
               )} ${flipping[i] ? 'animate-tile-flip' : ''}`}
             >

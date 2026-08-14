@@ -1,6 +1,4 @@
-import { PhonemeWordEntry } from './phonemeData';
-import { KEYPAD_TOP, KEYPAD_BOTTOM } from './phonemeData';
-
+import { PhonemeWordEntry, KEYPAD_TOP, KEYPAD_BOTTOM } from './phonemeData';
 
 type Orientation = 'horizontal' | 'vertical' | 'diagonal';
 
@@ -24,6 +22,11 @@ interface GridCell {
 
 export interface PlacedWord {
   word: string;
+  // Ordered by the word's OWN phoneme index (0..length-1), NOT by
+  // geometric placement order — so cells[i] always corresponds to
+  // entry.phonemes[i], regardless of whether the word was placed
+  // forwards or backwards. This is what lets a hint click look up
+  // "which grid cell holds phoneme index N" directly.
   cells: { row: number; col: number }[];
 }
 
@@ -39,12 +42,12 @@ const ALL_PHONEME_SYMBOLS = [...KEYPAD_TOP, ...KEYPAD_BOTTOM]
   .flat()
   .filter((symbol): symbol is string => symbol !== '');
 
-function randomPhoneme(): string {
-  return ALL_PHONEME_SYMBOLS[randomInt(0, ALL_PHONEME_SYMBOLS.length - 1)];
-}
-
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomPhoneme(): string {
+  return ALL_PHONEME_SYMBOLS[randomInt(0, ALL_PHONEME_SYMBOLS.length - 1)];
 }
 
 export function generateWordSearchGrid(words: PhonemeWordEntry[], gridSize: number): WordSearchResult {
@@ -58,13 +61,11 @@ export function generateWordSearchGrid(words: PhonemeWordEntry[], gridSize: numb
   const orderedWords = [...words].sort((a, b) => b.phonemes.length - a.phonemes.length);
 
   for (const entry of orderedWords) {
-    const path = tryPlaceWord(cells, entry, gridSize);
-    if (path) placedWords.push({ word: entry.word, cells: path });
+    const cellsByPhonemeIndex = tryPlaceWord(cells, entry, gridSize);
+    if (cellsByPhonemeIndex) placedWords.push({ word: entry.word, cells: cellsByPhonemeIndex });
     else unplacedWords.push(entry.word);
   }
 
-  // Fill every still-empty cell with a random phoneme, so the finished
-  // grid has no visible gaps — same as a real word search's filler letters.
   for (let row = 0; row < gridSize; row++) {
     for (let col = 0; col < gridSize; col++) {
       if (cells[row][col].symbol === null) {
@@ -77,8 +78,6 @@ export function generateWordSearchGrid(words: PhonemeWordEntry[], gridSize: numb
   return { grid, placedWords, unplacedWords };
 }
 
-// Returns the exact cell path the word was placed along, or null if no
-// valid placement was found within the attempt budget.
 function tryPlaceWord(
   cells: GridCell[][],
   entry: PhonemeWordEntry,
@@ -92,7 +91,11 @@ function tryPlaceWord(
     const backwards = Math.random() < 0.5;
 
     const startCol =
-      dir.dx === 1 ? randomInt(0, gridSize - length) : dir.dx === -1 ? randomInt(length - 1, gridSize - 1) : randomInt(0, gridSize - 1);
+      dir.dx === 1
+        ? randomInt(0, gridSize - length)
+        : dir.dx === -1
+        ? randomInt(length - 1, gridSize - 1)
+        : randomInt(0, gridSize - 1);
     const startRow = dir.dy === 1 ? randomInt(0, gridSize - length) : randomInt(0, gridSize - 1);
 
     const path = Array.from({ length }, (_, i) => ({
@@ -107,7 +110,14 @@ function tryPlaceWord(
         cells[pos.row][pos.col].symbol = letters[i];
         cells[pos.row][pos.col].orientations.add(dir.orientation);
       });
-      return path;
+
+      // Re-map from geometric path order back to original phoneme order.
+      const cellsByPhonemeIndex = entry.phonemes.map((_, phonemeIndex) => {
+        const pathIndex = backwards ? length - 1 - phonemeIndex : phonemeIndex;
+        return path[pathIndex];
+      });
+
+      return cellsByPhonemeIndex;
     }
   }
 

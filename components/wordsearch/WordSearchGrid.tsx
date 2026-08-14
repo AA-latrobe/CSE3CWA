@@ -2,7 +2,8 @@
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import WordSearchWordListPreview from './WordSearchWordListPreview';
-import { PhonemeWordEntry } from '@/lib/phonemeData';
+import { useHintFlip } from '../../lib/useHintFlip';
+import { PhonemeWordEntry, getPhonemeHoverText } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 
 const MAX_CELL_SIZE = 40;
@@ -11,22 +12,68 @@ const MIN_GAP = 4;
 const LEFT_COL_WIDTH = 176;
 const ROW_GAP = 24;
 
+type HintState = { word: string; phonemeIndex: number; nonce: number } | null;
+
 type Props = {
   gridSize: number;
   selectedWords: PhonemeWordEntry[];
   placedGrid: (string | null)[][] | null;
-  wordCellKeys: Set<string>; // "row,col" strings for every cell that's part of a placed word
+  wordCellKeys: Set<string>;
+  hintCell: { row: number; col: number; token: string } | null;
   revealWords: boolean;
+  placedWordSet: Set<string>;
+  hint: HintState;
+  onHintClick: (entry: PhonemeWordEntry) => void;
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
+
+function GridCellView({
+  symbol,
+  isWordCell,
+  revealWords,
+  triggerId,
+  cellSize,
+}: {
+  symbol: string | null;
+  isWordCell: boolean;
+  revealWords: boolean;
+  triggerId: string | null;
+  cellSize: number;
+}) {
+  const { flipping, revealed } = useHintFlip(triggerId);
+
+  const colorClass = revealed
+    ? 'bg-partial text-partial-foreground'
+    : isWordCell && revealWords
+    ? 'bg-key-used text-key-used-foreground'
+    : 'bg-key text-key-foreground';
+
+  return (
+    <div style={{ perspective: '400px' }}>
+      <div
+        title={symbol ? getPhonemeHoverText(symbol) : undefined}
+        className={`flex items-center justify-center rounded-md ${colorClass} ${
+          flipping ? 'animate-tile-flip' : ''
+        }`}
+        style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+      >
+        {symbol ?? ''}
+      </div>
+    </div>
+  );
+}
 
 export default function WordSearchGrid({
   gridSize,
   selectedWords,
   placedGrid,
   wordCellKeys,
+  hintCell,
   revealWords,
+  placedWordSet,
+  hint,
+  onHintClick,
   isDarkTheme,
   isHighContrast,
 }: Props) {
@@ -48,7 +95,14 @@ export default function WordSearchGrid({
 
   const wordList = (
     <div className="w-44 flex-shrink-0">
-      <WordSearchWordListPreview words={selectedWords} count={getWordCountForGridSize(gridSize)} />
+      <WordSearchWordListPreview
+        words={selectedWords}
+        count={getWordCountForGridSize(gridSize)}
+        revealWords={revealWords}
+        placedWordSet={placedWordSet}
+        hint={hint}
+        onHintClick={onHintClick}
+      />
     </div>
   );
 
@@ -66,30 +120,33 @@ export default function WordSearchGrid({
             const row = Math.floor(i / gridSize);
             const col = i % gridSize;
 
-            // Defensive check: placedGrid may briefly still have the OLD grid's
-            // dimensions for one render after gridSize changes, before the
-            // clearing effect in WordSearchBuilder has run. Without this guard,
-            // reading placedGrid[row][col] against the new (larger) gridSize can
-            // index past the old grid's actual size and throw.
-            const gridIsValidSize = placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
+            const gridIsValidSize =
+              placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
 
-            const symbol = gridIsValidSize ? placedGrid![row][col] : null;
-            const isWordCell = gridIsValidSize ? wordCellKeys.has(`${row},${col}`) : false;
+            if (!gridIsValidSize) {
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-center rounded-md border-2 border-foreground/20"
+                  style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+                />
+              );
+            }
 
-            const cellColorClass = !gridIsValidSize
-              ? 'border-2 border-foreground/20'
-              : isWordCell && revealWords
-              ? 'bg-key-used text-key-used-foreground'
-              : 'bg-key text-key-foreground';
+            const symbol = placedGrid![row][col];
+            const isWordCell = wordCellKeys.has(`${row},${col}`);
+            const triggerId =
+              hintCell && hintCell.row === row && hintCell.col === col ? hintCell.token : null;
 
             return (
-              <div
+              <GridCellView
                 key={i}
-                className={`flex items-center justify-center rounded-md ${cellColorClass}`}
-                style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
-              >
-                {symbol ?? ''}
-              </div>
+                symbol={symbol}
+                isWordCell={isWordCell}
+                revealWords={revealWords}
+                triggerId={triggerId}
+                cellSize={cellSize}
+              />
             );
           })}
         </div>

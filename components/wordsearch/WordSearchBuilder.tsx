@@ -13,6 +13,12 @@ import { generateWordSearchGrid, PlacedWord } from '@/lib/wordSearchGenerator';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
+interface HintState {
+  word: string;
+  phonemeIndex: number;
+  nonce: number;
+}
+
 export default function WordSearchBuilder() {
   const { theme, highContrast } = useTheme();
 
@@ -28,6 +34,8 @@ export default function WordSearchBuilder() {
   const [placedGrid, setPlacedGrid] = useState<(string | null)[][] | null>(null);
   const [placedWords, setPlacedWords] = useState<PlacedWord[]>([]);
   const [revealWords, setRevealWords] = useState(true);
+  const [hint, setHint] = useState<HintState | null>(null);
+  const hintCounter = useRef(0);
   const hasRestoredScroll = useRef(false);
 
   const targetWordCount = getWordCountForGridSize(gridSize);
@@ -39,6 +47,29 @@ export default function WordSearchBuilder() {
     }
     return set;
   }, [placedWords]);
+
+  const placedWordSet = useMemo(() => new Set(placedWords.map((pw) => pw.word)), [placedWords]);
+
+  const wordPhonemeCells = useMemo(() => {
+    const map: Record<string, { row: number; col: number }[]> = {};
+    for (const pw of placedWords) map[pw.word] = pw.cells;
+    return map;
+  }, [placedWords]);
+
+  const hintCell = useMemo(() => {
+    if (!hint) return null;
+    const cells = wordPhonemeCells[hint.word];
+    const cell = cells?.[hint.phonemeIndex];
+    if (!cell) return null;
+    return { row: cell.row, col: cell.col, token: `${hint.word}-${hint.phonemeIndex}-${hint.nonce}` };
+  }, [hint, wordPhonemeCells]);
+
+  const handleHintClick = (entry: PhonemeWordEntry) => {
+    if (!wordPhonemeCells[entry.word]) return; // word wasn't successfully placed — no hint available
+    const idx = Math.floor(Math.random() * entry.phonemes.length);
+    hintCounter.current += 1;
+    setHint({ word: entry.word, phonemeIndex: idx, nonce: hintCounter.current });
+  };
 
   const handleSelectedWordsChange = (words: PhonemeWordEntry[]) => {
     setSelectedWords(words.slice(0, targetWordCount));
@@ -62,6 +93,7 @@ export default function WordSearchBuilder() {
     prevWordSetRef.current = currentWordSet;
     setPlacedGrid(null);
     setPlacedWords([]);
+    setHint(null);
   }, [selectedWords]);
 
   const handleAddRandom = () => {
@@ -87,6 +119,7 @@ export default function WordSearchBuilder() {
     const result = generateWordSearchGrid(selectedWords, gridSize);
     setPlacedGrid(result.grid);
     setPlacedWords(result.placedWords);
+    setHint(null);
   };
 
   useEffect(() => {
@@ -190,7 +223,11 @@ export default function WordSearchBuilder() {
           selectedWords={selectedWords}
           placedGrid={placedGrid}
           wordCellKeys={wordCellKeys}
+          hintCell={hintCell}
           revealWords={revealWords}
+          placedWordSet={placedWordSet}
+          hint={hint}
+          onHintClick={handleHintClick}
           isDarkTheme={theme === 'dark'}
           isHighContrast={highContrast}
         />

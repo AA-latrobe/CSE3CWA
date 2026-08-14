@@ -10,6 +10,7 @@ import { WORD_LIST, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 import { getInitialWordSearchState, saveWordSearchState } from '@/lib/wordSearchStorage';
 import { generateWordSearchGrid, PlacedWord } from '@/lib/wordSearchGenerator';
+import WordSearchTitle from './WordSearchTitle';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
@@ -240,6 +241,7 @@ export default function WordSearchBuilder() {
     setHint(null);
     setFoundWords(new Set());
     clearAllSolves();
+    setTitleSignal((n) => n + 1); // also randomise the title on every build/rebuild
   };
 
   useEffect(() => {
@@ -289,6 +291,12 @@ export default function WordSearchBuilder() {
     return () => {
       solveTimersRef.current.forEach((timers) => timers.forEach(clearTimeout));
     };
+  }, []);
+
+  const [titleSignal, setTitleSignal] = useState(0);
+
+  useEffect(() => {
+    setTitleSignal((n) => n + 1); // randomise once on mount (page load)
   }, []);
 
   return (
@@ -344,6 +352,9 @@ export default function WordSearchBuilder() {
             <ToggleSwitch checked={revealWords} onChange={setRevealWords} />
           </div>
         </div>
+
+        <WordSearchTitle resetSignal={titleSignal} />
+
         <WordSearchGrid
           gridSize={gridSize}
           selectedWords={selectedWords}

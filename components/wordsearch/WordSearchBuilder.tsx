@@ -25,19 +25,12 @@ export default function WordSearchBuilder() {
   const [scrollY, setScrollY] = useState(initial.scrollY);
   const hasRestoredScroll = useRef(false);
 
-  // Track scroll continuously from mount — not gated by any condition,
-  // same lesson learned with WordleBuilder: a listener that only starts
-  // existing after some later event misses whatever scrolling already
-  // happened before that event.
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Restore once, waiting for fonts + polling until the page is tall
-  // enough to actually reach the saved position — same approach as
-  // WordleBuilder's scroll restore.
   useEffect(() => {
     if (initial.scrollY <= 0) return;
     if (hasRestoredScroll.current) return;

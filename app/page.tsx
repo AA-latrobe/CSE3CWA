@@ -30,15 +30,10 @@ export default function Home() {
     setCookie(ACTIVE_VIEW_COOKIE, activeView);
   }, [activeView, hasHydrated]);
 
-  // Always reset to top on every tab switch, unconditionally — including
-  // Wordle and Word Search. Without this, a tab that's never been
-  // scrolled before (its own saved scrollY is 0) has nothing telling the
-  // browser to leave wherever the PREVIOUS tab was scrolled to, which is
-  // what made one tab's position appear to "leak" into another. Wordle's
-  // and Word Search's own restore effects run asynchronously (they wait
-  // on document.fonts.ready before doing anything), so they reliably
-  // fire AFTER this synchronous reset and correctly override it back to
-  // the real saved position when one genuinely exists.
+  // Always reset to top on every tab switch. Wordle and Word Search each
+  // independently restore their own saved scroll position afterward, via
+  // their own cookie-backed effect (which waits on document.fonts.ready,
+  // so it reliably runs after this synchronous reset).
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [activeView]);

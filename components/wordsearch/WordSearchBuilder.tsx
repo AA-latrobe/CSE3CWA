@@ -84,19 +84,14 @@ export default function WordSearchBuilder() {
           onSelectedWordsChange={setSelectedWords}
           searchStorageKey={SEARCH_STORAGE_KEY}
           footerSlot={
-            <GridDimensionStepper
-              value={gridSize}
-              min={MIN_GRID_SIZE}
-              max={MAX_GRID_SIZE}
-              onChange={setGridSize}
-            />
+            <GridDimensionStepper value={gridSize} onChange={setGridSize} />
           }
         />
       </div>
 
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
         <h2 className="mb-6 text-lg font-semibold text-foreground">Preview</h2>
-        <WordSearchGrid isDarkTheme={theme === 'dark'} isHighContrast={highContrast} />
+        <WordSearchGrid gridSize={gridSize} isDarkTheme={theme === 'dark'} isHighContrast={highContrast} />
       </div>
     </div>
   );

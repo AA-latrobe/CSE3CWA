@@ -34,6 +34,12 @@ type Props = {
   foundWords: Set<string>;
   solves: SolveState[];
   onWordMatched: (word: string) => void;
+  gridRowFlip: { revealed: boolean; flipping: boolean }[];
+  wordPairRevealed: Set<string>;
+  wordPairFlippingWord: string | null;
+  hintRevealed: Set<string>;
+  hintFlippingWord: string | null;
+  isPlayable: boolean;
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
@@ -86,8 +92,6 @@ function GridCellView({
   const { flipping: hintFlipping, revealed: hintRevealed } = useHintFlip(hintTriggerId);
   const { flipping: selFlipping, highlighted: selHighlighted } = useSelectionReleaseFlip(releaseToken);
 
-  // "True" state — what this cell should show when nothing is being
-  // dragged/held over it.
   let baseColorClass: string;
   let baseFlipping: boolean;
   if (solveInfo) {
@@ -105,16 +109,15 @@ function GridCellView({
       : 'bg-key text-key-foreground';
   }
 
-  // Selection overlay ALWAYS takes visual priority — dragging or holding
-  // over a cell shows yellow instantly regardless of what's underneath
-  // (including an already-found green cell), and only the final "flip
-  // back" step reveals whatever the true state actually is.
   let colorClass = baseColorClass;
   let isFlipping = baseFlipping;
 
-  if (liveSelected || selHighlighted) {
+  if (liveSelected) {
     colorClass = 'bg-partial text-partial-foreground';
-    isFlipping = selHighlighted ? selFlipping : false;
+    isFlipping = false;
+  } else if (selHighlighted) {
+    colorClass = 'bg-partial text-partial-foreground';
+    isFlipping = selFlipping;
   } else if (selFlipping) {
     colorClass = baseColorClass;
     isFlipping = true;
@@ -152,6 +155,12 @@ export default function WordSearchGrid({
   foundWords,
   solves,
   onWordMatched,
+  gridRowFlip,
+  wordPairRevealed,
+  wordPairFlippingWord,
+  hintRevealed,
+  hintFlippingWord,
+  isPlayable,
   isDarkTheme,
   isHighContrast,
 }: Props) {
@@ -181,9 +190,6 @@ export default function WordSearchGrid({
     return set;
   }, [foundWords, wordPhonemeCells]);
 
-  // Maps every cell currently involved in ANY active solve to that
-  // solve's state + this cell's index within it — supports multiple
-  // concurrent solves without one overwriting another's lookup.
   const solveCellMap = useMemo(() => {
     const map = new Map<string, { solve: SolveState; index: number }>();
     for (const s of solves) {
@@ -241,7 +247,7 @@ export default function WordSearchGrid({
   }, [placedGrid]);
 
   const handleCellMouseDown = (row: number, col: number) => {
-    if (!placedGrid) return;
+    if (!placedGrid || !isPlayable) return;
     setIsDragging(true);
     dragStartRef.current = { row, col };
     setDragPath([{ row, col }]);
@@ -250,7 +256,7 @@ export default function WordSearchGrid({
   };
 
   const handleCellMouseEnter = (row: number, col: number) => {
-    if (!placedGrid) return;
+    if (!placedGrid || !isPlayable) return;
     if (isDragging && dragStartRef.current) {
       const path = computeStraightPath(dragStartRef.current, { row, col });
       if (path) setDragPath(path);
@@ -270,6 +276,10 @@ export default function WordSearchGrid({
         onHintClick={onHintClick}
         foundWords={foundWords}
         solves={solves}
+        wordPairRevealed={wordPairRevealed}
+        wordPairFlippingWord={wordPairFlippingWord}
+        hintRevealed={hintRevealed}
+        hintFlippingWord={hintFlippingWord}
       />
     </div>
   );
@@ -296,13 +306,25 @@ export default function WordSearchGrid({
             const gridIsValidSize =
               placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
 
-            if (!gridIsValidSize) {
+            const rowFlipInfo = gridRowFlip[row];
+            const rowIsSizedCorrectly = gridRowFlip.length === gridSize;
+            const rowRevealed = gridIsValidSize && rowIsSizedCorrectly && rowFlipInfo?.revealed;
+
+            // Not built, or this row hasn't been intro-revealed yet —
+            // plain bordered placeholder, with a flip animation if this
+            // row is the one currently mid-reveal. No symbol, no hover
+            // text, until the row genuinely becomes revealed.
+            if (!gridIsValidSize || !rowRevealed) {
+              const flipping = gridIsValidSize && rowIsSizedCorrectly && rowFlipInfo?.flipping;
               return (
-                <div
-                  key={i}
-                  className="flex items-center justify-center rounded-md border-2 border-foreground/20"
-                  style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
-                />
+                <div key={i} style={{ perspective: '400px' }}>
+                  <div
+                    className={`flex items-center justify-center rounded-md border-2 border-foreground/20 bg-background ${
+                      flipping ? 'animate-tile-flip' : ''
+                    }`}
+                    style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+                  />
+                </div>
               );
             }
 

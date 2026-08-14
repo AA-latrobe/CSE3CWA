@@ -14,12 +14,29 @@ type Props = {
   onHintClick: (entry: PhonemeWordEntry) => void;
   foundWords: Set<string>;
   solves: SolveState[];
+  wordPairRevealed: Set<string>;
+  wordPairFlippingWord: string | null;
+  hintRevealed: Set<string>;
+  hintFlippingWord: string | null;
 };
 
 const BOX_SIZE = 26;
 const GAP = 4;
 const MAX_PHONEME_SLOTS = 5;
 const GROUP_GAP = GAP * 2;
+
+function Placeholder({ flipping }: { flipping: boolean }) {
+  return (
+    <div style={{ perspective: '400px' }}>
+      <div
+        className={`rounded-md border border-foreground/20 bg-background ${
+          flipping ? 'animate-tile-flip' : ''
+        }`}
+        style={{ width: BOX_SIZE, height: BOX_SIZE }}
+      />
+    </div>
+  );
+}
 
 function HintBox({
   isFound,
@@ -147,6 +164,10 @@ export default function WordSearchWordListPreview({
   onHintClick,
   foundWords,
   solves,
+  wordPairRevealed,
+  wordPairFlippingWord,
+  hintRevealed,
+  hintFlippingWord,
 }: Props) {
   return (
     <div className="w-full">
@@ -161,10 +182,20 @@ export default function WordSearchWordListPreview({
           const solveForWord = entry ? solves.find((s) => s.word === entry.word) ?? null : null;
           const hintForThisWord = entry && hint && hint.word === entry.word ? hint : null;
 
+          // Word-pair reveal gate: applies to the phoneme boxes + English
+          // box together, regardless of whether the word was placed.
+          const pairRevealed = entry ? wordPairRevealed.has(entry.word) : false;
+          const pairFlipping = entry ? wordPairFlippingWord === entry.word : false;
+
+          // Hint-box reveal gate: separate, later stage — only meaningful
+          // for placed words.
+          const hintBoxRevealed = entry && isPlaced ? hintRevealed.has(entry.word) : false;
+          const hintBoxFlipping = entry && isPlaced ? hintFlippingWord === entry.word : false;
+
           return (
             <div key={groupIndex}>
               <div className="flex" style={{ gap: GAP }}>
-                {entry && isPlaced ? (
+                {entry && isPlaced && hintBoxRevealed ? (
                   <HintBox
                     isFound={isFound}
                     solve={solveForWord}
@@ -172,24 +203,18 @@ export default function WordSearchWordListPreview({
                     onClick={() => onHintClick(entry)}
                   />
                 ) : (
-                  <div
-                    className="rounded-md border border-foreground/20 bg-background"
-                    style={{ width: BOX_SIZE, height: BOX_SIZE }}
-                  />
+                  <Placeholder flipping={hintBoxFlipping} />
                 )}
 
                 {Array.from({ length: MAX_PHONEME_SLOTS }).map((_, i) => {
                   if (entry && i >= entry.phonemes.length) return null;
                   const symbol = entry?.phonemes[i];
-                  if (!symbol) {
-                    return (
-                      <div
-                        key={i}
-                        className="rounded-md border border-foreground/20 bg-background"
-                        style={{ width: BOX_SIZE, height: BOX_SIZE }}
-                      />
-                    );
+                  if (!symbol) return <Placeholder key={i} flipping={false} />;
+
+                  if (!pairRevealed) {
+                    return <Placeholder key={i} flipping={pairFlipping} />;
                   }
+
                   const triggerId =
                     hintForThisWord && hintForThisWord.phonemeIndex === i
                       ? `${entry!.word}-${i}-${hintForThisWord.nonce}`
@@ -211,22 +236,35 @@ export default function WordSearchWordListPreview({
               </div>
 
               <div style={{ perspective: '400px' }} className="mt-1">
-                <div
-                  className={`flex items-center justify-center rounded-md ${
-                    entry
-                      ? isFound || solveForWord?.wordBoxRevealed
-                        ? 'bg-word-reveal px-2 font-semibold text-word-reveal-foreground'
-                        : 'bg-key px-2 font-semibold text-key-foreground'
-                      : 'border border-foreground/20 bg-background'
-                  } ${solveForWord?.wordBoxFlipping ? 'animate-tile-flip' : ''}`}
-                  style={{
-                    width: entry ? englishWordWidth : 5 * BOX_SIZE + 4 * GAP,
-                    height: BOX_SIZE,
-                    marginLeft: BOX_SIZE + GAP,
-                  }}
-                >
-                  {entry?.word ?? ''}
-                </div>
+                {!pairRevealed ? (
+                  <div
+                    className={`rounded-md border border-foreground/20 bg-background ${
+                      pairFlipping ? 'animate-tile-flip' : ''
+                    }`}
+                    style={{
+                      width: entry ? englishWordWidth : 5 * BOX_SIZE + 4 * GAP,
+                      height: BOX_SIZE,
+                      marginLeft: BOX_SIZE + GAP,
+                    }}
+                  />
+                ) : (
+                  <div
+                    className={`flex items-center justify-center rounded-md ${
+                      entry
+                        ? isFound || solveForWord?.wordBoxRevealed
+                          ? 'bg-word-reveal px-2 font-semibold text-word-reveal-foreground'
+                          : 'bg-key px-2 font-semibold text-key-foreground'
+                        : 'border border-foreground/20 bg-background'
+                    } ${solveForWord?.wordBoxFlipping ? 'animate-tile-flip' : ''}`}
+                    style={{
+                      width: entry ? englishWordWidth : 5 * BOX_SIZE + 4 * GAP,
+                      height: BOX_SIZE,
+                      marginLeft: BOX_SIZE + GAP,
+                    }}
+                  >
+                    {entry?.word ?? ''}
+                  </div>
+                )}
               </div>
             </div>
           );

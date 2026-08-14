@@ -26,8 +26,8 @@ function flatIndex(row: number, col: number) {
   return (row - 1) * COLS + (col - 1);
 }
 
-const WORD1_INDICES = [flatIndex(2, 2), flatIndex(2, 3), flatIndex(2, 4)]; // left-to-right
-const WORD2_INDICES = [flatIndex(1, 6), flatIndex(2, 7), flatIndex(3, 8)]; // diagonal down-right
+const WORD1_INDICES = [flatIndex(2, 2), flatIndex(2, 3), flatIndex(2, 4)];
+const WORD2_INDICES = [flatIndex(1, 6), flatIndex(2, 7), flatIndex(3, 8)];
 
 type CellColor = 'grey' | 'yellow' | 'green';
 interface CellState {
@@ -44,10 +44,10 @@ interface BoxState {
 }
 
 const INITIAL_DELAY_MS = 1000;
-const FLIP_MS = 500; // matches the app's standard flip duration
-const SWIPE_STAGGER_MS = 100; // ASSUMPTION: pace of a "natural" cell-to-cell drag
-const SWIPE_HOLD_MS = 500; // ASSUMPTION: pause after a swipe finishes, before it resolves green
-const SOLVE_STAGGER_MS = 150; // matches the in-game solve stagger
+const FLIP_MS = 500;
+const SWIPE_STAGGER_MS = 100;
+const SWIPE_HOLD_MS = 500;
+const SOLVE_STAGGER_MS = 150;
 const GAP_BETWEEN_WORDS_MS = 500;
 
 function emptyCellState(): CellState {
@@ -59,9 +59,10 @@ function emptyBoxState(): BoxState {
 
 type Props = {
   resetSignal: number;
+  onComplete?: () => void;
 };
 
-export default function WordSearchTitle({ resetSignal }: Props) {
+export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
   const symbolsRef = useRef<string[]>([]);
   const [cellStates, setCellStates] = useState<CellState[]>(() =>
     Array.from({ length: ROWS * COLS }, emptyCellState)
@@ -69,6 +70,13 @@ export default function WordSearchTitle({ resetSignal }: Props) {
   const [wordBox, setWordBox] = useState<BoxState>(emptyBoxState);
   const [searchBox, setSearchBox] = useState<BoxState>(emptyBoxState);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Always call the LATEST onComplete, not whichever version was current
+  // when this effect first scheduled its timers — important since the
+  // parent (WordSearchBuilder) redefines this callback every render, and
+  // by the time this fires (several seconds later) it needs fresh state.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     const fixedMap = new Map<string, string>();
@@ -139,21 +147,16 @@ export default function WordSearchTitle({ resetSignal }: Props) {
     };
 
     let time = INITIAL_DELAY_MS;
-
-    // Row-by-row reveal, now overlapping — each row starts while the
-    // previous one is still mid-flip, roughly doubling the perceived speed
-    // without changing how long any single tile's own flip takes.
     const REVEAL_STAGGER_MS = FLIP_MS / 2;
 
     for (let row = 1; row <= ROWS; row++) {
-    const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
-    t(() => setCellsFlipping(rowIndices, true), time);
-    t(() => revealCells(rowIndices, 'grey'), time + FLIP_MS / 2);
-    t(() => setCellsFlipping(rowIndices, false), time + FLIP_MS);
-    time += REVEAL_STAGGER_MS;
+      const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
+      t(() => setCellsFlipping(rowIndices, true), time);
+      t(() => revealCells(rowIndices, 'grey'), time + FLIP_MS / 2);
+      t(() => setCellsFlipping(rowIndices, false), time + FLIP_MS);
+      time += REVEAL_STAGGER_MS;
     }
 
-    // "word" then "search" flip in — same overlapping stagger.
     t(() => setBoxFlipping('word', true), time);
     t(() => revealBox('word', 'grey'), time + FLIP_MS / 2);
     t(() => setBoxFlipping('word', false), time + FLIP_MS);
@@ -164,7 +167,6 @@ export default function WordSearchTitle({ resetSignal }: Props) {
     t(() => setBoxFlipping('search', false), time + FLIP_MS);
     time += REVEAL_STAGGER_MS;
 
-    // Pause, then a "drag" swipe across word 1, left to right.
     time += 1000;
     WORD1_INDICES.forEach((idx, i) => {
       t(() => setCellColorInstant(idx, 'yellow'), time + i * SWIPE_STAGGER_MS);
@@ -172,7 +174,6 @@ export default function WordSearchTitle({ resetSignal }: Props) {
     time += (WORD1_INDICES.length - 1) * SWIPE_STAGGER_MS;
     time += SWIPE_HOLD_MS;
 
-    // Flip word 1's letters green, in order, then flip "word" blue.
     WORD1_INDICES.forEach((idx, i) => {
       const start = time + i * SOLVE_STAGGER_MS;
       t(() => setCellFlipping(idx, true), start);
@@ -185,7 +186,6 @@ export default function WordSearchTitle({ resetSignal }: Props) {
     t(() => setBoxColor('word', 'blue'), word1LettersEnd + FLIP_MS / 2);
     t(() => setBoxFlipping('word', false), word1LettersEnd + FLIP_MS);
 
-    // After "word" finishes, pause, then repeat for word 2 (diagonal swipe).
     time = word1LettersEnd + FLIP_MS + GAP_BETWEEN_WORDS_MS;
     WORD2_INDICES.forEach((idx, i) => {
       t(() => setCellColorInstant(idx, 'yellow'), time + i * SWIPE_STAGGER_MS);
@@ -205,28 +205,26 @@ export default function WordSearchTitle({ resetSignal }: Props) {
     t(() => setBoxColor('search', 'blue'), word2LettersEnd + FLIP_MS / 2);
     t(() => setBoxFlipping('search', false), word2LettersEnd + FLIP_MS);
 
-    // Closing flourish: same pause used before each swipe, then flip every
-    // row again at double the already-doubled reveal speed — purely visual,
-    // no color changes, since every cell already holds its final state.
+    // Closing flourish
     time = word2LettersEnd + FLIP_MS + SWIPE_HOLD_MS;
-
     const FLOURISH_STAGGER_MS = REVEAL_STAGGER_MS / 2;
 
     for (let row = 1; row <= ROWS; row++) {
-    const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
-    t(() => setCellsFlipping(rowIndices, true), time);
-    t(() => setCellsFlipping(rowIndices, false), time + FLIP_MS);
-    time += FLOURISH_STAGGER_MS;
+      const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
+      t(() => setCellsFlipping(rowIndices, true), time);
+      t(() => setCellsFlipping(rowIndices, false), time + FLIP_MS);
+      time += FLOURISH_STAGGER_MS;
     }
 
-    // "word" then "search" join the flourish too, same overlapping stagger,
-    // no color change — just the flip motion.
     t(() => setBoxFlipping('word', true), time);
     t(() => setBoxFlipping('word', false), time + FLIP_MS);
     time += FLOURISH_STAGGER_MS;
 
     t(() => setBoxFlipping('search', true), time);
     t(() => setBoxFlipping('search', false), time + FLIP_MS);
+
+    const finalTime = time + FLIP_MS;
+    t(() => onCompleteRef.current?.(), finalTime);
 
     return () => {
       timers.current.forEach(clearTimeout);

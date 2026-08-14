@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
 import WordSearchGrid from './WordSearchGrid';
+import WordSearchTitle from './WordSearchTitle';
 import GridDimensionStepper from './GridDimensionStepper';
 import WordCountIndicator from './WordCountIndicator';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
@@ -10,7 +11,6 @@ import { WORD_LIST, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 import { getInitialWordSearchState, saveWordSearchState } from '@/lib/wordSearchStorage';
 import { generateWordSearchGrid, PlacedWord } from '@/lib/wordSearchGenerator';
-import WordSearchTitle from './WordSearchTitle';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
@@ -35,6 +35,8 @@ const SOLVE_FLIP_MS = 500;
 const SOLVE_STAGGER_MS = 150;
 const SOLVE_HOLD_MS = 1000;
 
+const INTRO_FLIP_MS = 500; // matches SOLVE_FLIP_MS — kept as its own constant since intro timing is conceptually separate
+
 export default function WordSearchBuilder() {
   const { theme, highContrast } = useTheme();
 
@@ -52,14 +54,20 @@ export default function WordSearchBuilder() {
   const [revealWords, setRevealWords] = useState(true);
   const [hint, setHint] = useState<HintState | null>(null);
   const [foundWords, setFoundWords] = useState<Set<string>>(new Set());
-  // Multiple words can be mid-animation simultaneously — an array, not a
-  // single slot, so solving word B never clobbers word A's in-flight
-  // animation if the user finds them in quick succession.
   const [solves, setSolves] = useState<SolveState[]>([]);
+  const [titleSignal, setTitleSignal] = useState(0);
+
+  // --- intro reveal sequence state ---
+  const [gridRowFlip, setGridRowFlip] = useState<{ revealed: boolean; flipping: boolean }[]>([]);
+  const [wordPairRevealed, setWordPairRevealed] = useState<Set<string>>(new Set());
+  const [wordPairFlippingWord, setWordPairFlippingWord] = useState<string | null>(null);
+  const [hintRevealed, setHintRevealed] = useState<Set<string>>(new Set());
+  const [hintFlippingWord, setHintFlippingWord] = useState<string | null>(null);
+  const [isPlayable, setIsPlayable] = useState(false);
+  const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const hintCounter = useRef(0);
   const solveNonceRef = useRef(0);
-  // Each nonce gets its OWN timer list, so clearing one solve's timers
-  // (e.g. on completion) never touches another concurrent solve's timers.
   const solveTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>[]>>(new Map());
   const hasRestoredScroll = useRef(false);
 
@@ -104,9 +112,110 @@ export default function WordSearchBuilder() {
     setSolves([]);
   };
 
+  const clearIntroTimers = () => {
+    introTimersRef.current.forEach(clearTimeout);
+    introTimersRef.current = [];
+  };
+
+  // Resets everything intro-related back to "not yet revealed" — called
+  // whenever a fresh puzzle is built, so the grid/word list/hints all
+  // start hidden again and wait for the new intro sequence to run.
+  const resetIntroState = (size: number) => {
+    clearIntroTimers();
+    setGridRowFlip(Array.from({ length: size }, () => ({ revealed: false, flipping: false })));
+    setWordPairRevealed(new Set());
+    setWordPairFlippingWord(null);
+    setHintRevealed(new Set());
+    setHintFlippingWord(null);
+    setIsPlayable(false);
+  };
+
+  // Runs the grid-reveal → word-pairs → hints → playable sequence. Called
+  // once the title animation reports it's finished (via handleTitleComplete
+  // below), and only if a puzzle is actually built at that moment.
+  const startIntroSequence = () => {
+    clearIntroTimers();
+
+    const t = (fn: () => void, delay: number) => {
+      introTimersRef.current.push(setTimeout(fn, delay));
+    };
+
+    // Overlapping stagger — same technique used in the title's own reveal —
+    // roughly doubles perceived speed vs. waiting a full flip to finish
+    // before starting the next row/pair/hint.
+    const STAGGER_MS = INTRO_FLIP_MS / 2;
+
+    let time = 1000;
+
+    for (let row = 0; row < gridSize; row++) {
+      t(
+        () =>
+          setGridRowFlip((prev) => {
+            const next = [...prev];
+            next[row] = { ...next[row], flipping: true };
+            return next;
+          }),
+        time
+      );
+      t(
+        () =>
+          setGridRowFlip((prev) => {
+            const next = [...prev];
+            next[row] = { ...next[row], revealed: true };
+            return next;
+          }),
+        time + INTRO_FLIP_MS / 2
+      );
+      t(
+        () =>
+          setGridRowFlip((prev) => {
+            const next = [...prev];
+            next[row] = { ...next[row], flipping: false };
+            return next;
+          }),
+        time + INTRO_FLIP_MS
+      );
+      time += STAGGER_MS;
+    }
+    // Make sure the last row's flip has genuinely finished before the next
+    // phase starts — the loop above overlaps items WITHIN a phase, but
+    // phases themselves should stay sequential.
+    time += INTRO_FLIP_MS - STAGGER_MS;
+
+    for (const entry of selectedWords) {
+      const word = entry.word;
+      t(() => setWordPairFlippingWord(word), time);
+      t(() => setWordPairRevealed((prev) => new Set(prev).add(word)), time + INTRO_FLIP_MS / 2);
+      t(() => setWordPairFlippingWord(null), time + INTRO_FLIP_MS);
+      time += STAGGER_MS;
+    }
+    time += INTRO_FLIP_MS - STAGGER_MS;
+
+    const placedEntries = selectedWords.filter((w) => wordPhonemeCells[w.word]);
+    for (const entry of placedEntries) {
+      const word = entry.word;
+      t(() => setHintFlippingWord(word), time);
+      t(() => setHintRevealed((prev) => new Set(prev).add(word)), time + INTRO_FLIP_MS / 2);
+      t(() => setHintFlippingWord(null), time + INTRO_FLIP_MS);
+      time += STAGGER_MS;
+    }
+    time += INTRO_FLIP_MS - STAGGER_MS;
+
+    t(() => setIsPlayable(true), time);
+  };
+
+  // Passed to WordSearchTitle as onComplete — fires after the title's
+  // full animation (including its closing flourish) finishes.
+  const handleTitleComplete = () => {
+    if (placedGrid) {
+      startIntroSequence();
+    }
+  };
+
   const handleHintClick = (entry: PhonemeWordEntry) => {
+    if (!isPlayable) return;
     if (foundWords.has(entry.word)) return;
-    if (solves.some((s) => s.word === entry.word)) return; // already mid-solve
+    if (solves.some((s) => s.word === entry.word)) return;
     if (!wordPhonemeCells[entry.word]) return;
     const idx = Math.floor(Math.random() * entry.phonemes.length);
     hintCounter.current += 1;
@@ -184,7 +293,8 @@ export default function WordSearchBuilder() {
   };
 
   const handleWordMatched = (word: string) => {
-    if (solves.some((s) => s.word === word)) return; // duplicate match on an already-solving word — ignore
+    if (!isPlayable) return;
+    if (solves.some((s) => s.word === word)) return;
     beginSolveSequence(word);
   };
 
@@ -213,6 +323,7 @@ export default function WordSearchBuilder() {
     setHint(null);
     setFoundWords(new Set());
     clearAllSolves();
+    resetIntroState(gridSize);
   }, [selectedWords]);
 
   const handleAddRandom = () => {
@@ -241,8 +352,13 @@ export default function WordSearchBuilder() {
     setHint(null);
     setFoundWords(new Set());
     clearAllSolves();
-    setTitleSignal((n) => n + 1); // also randomise the title on every build/rebuild
+    resetIntroState(gridSize);
+    setTitleSignal((n) => n + 1);
   };
+
+  useEffect(() => {
+    setTitleSignal((n) => n + 1); // randomise + play title animation once on mount
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
@@ -290,13 +406,8 @@ export default function WordSearchBuilder() {
   useEffect(() => {
     return () => {
       solveTimersRef.current.forEach((timers) => timers.forEach(clearTimeout));
+      clearIntroTimers();
     };
-  }, []);
-
-  const [titleSignal, setTitleSignal] = useState(0);
-
-  useEffect(() => {
-    setTitleSignal((n) => n + 1); // randomise once on mount (page load)
   }, []);
 
   return (
@@ -353,7 +464,7 @@ export default function WordSearchBuilder() {
           </div>
         </div>
 
-        <WordSearchTitle resetSignal={titleSignal} />
+        <WordSearchTitle resetSignal={titleSignal} onComplete={handleTitleComplete} />
 
         <WordSearchGrid
           gridSize={gridSize}
@@ -369,6 +480,12 @@ export default function WordSearchBuilder() {
           foundWords={foundWords}
           solves={solves}
           onWordMatched={handleWordMatched}
+          gridRowFlip={gridRowFlip}
+          wordPairRevealed={wordPairRevealed}
+          wordPairFlippingWord={wordPairFlippingWord}
+          hintRevealed={hintRevealed}
+          hintFlippingWord={hintFlippingWord}
+          isPlayable={isPlayable}
           isDarkTheme={theme === 'dark'}
           isHighContrast={highContrast}
         />

@@ -2,8 +2,8 @@
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import WordSearchWordListPreview from './WordSearchWordListPreview';
-import { getWordCountForGridSize } from '@/lib/wordSearchData';
 import { PhonemeWordEntry } from '@/lib/phonemeData';
+import { getWordCountForGridSize } from '@/lib/wordSearchData';
 
 const MAX_CELL_SIZE = 40;
 const MIN_CELL_SIZE = 24;
@@ -14,14 +14,18 @@ const ROW_GAP = 24;
 type Props = {
   gridSize: number;
   selectedWords: PhonemeWordEntry[];
+  placedGrid: (string | null)[][] | null;
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
 
-export default function WordSearchGrid({ gridSize, selectedWords, isDarkTheme, isHighContrast }: Props) {
-  // All grid-size-dependent widths now derive from the gridSize prop
-  // rather than a fixed constant, so the side-by-side threshold and
-  // shrink calculations stay correct at every size the stepper allows.
+export default function WordSearchGrid({
+  gridSize,
+  selectedWords,
+  placedGrid,
+  isDarkTheme,
+  isHighContrast,
+}: Props) {
   const naturalGridWidth = gridSize * MAX_CELL_SIZE + (gridSize - 1) * MIN_GAP;
   const minGridWidth = gridSize * MIN_CELL_SIZE + (gridSize - 1) * MIN_GAP;
   const sideBySideThreshold = LEFT_COL_WIDTH + ROW_GAP + minGridWidth;
@@ -54,13 +58,23 @@ export default function WordSearchGrid({ gridSize, selectedWords, isDarkTheme, i
             gap: MIN_GAP,
           }}
         >
-          {Array.from({ length: gridSize * gridSize }).map((_, i) => (
-            <div
-              key={i}
-              className="flex items-center justify-center rounded-md border-2 border-foreground/20"
-              style={{ width: cellSize, height: cellSize }}
-            />
-          ))}
+          {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+            const row = Math.floor(i / gridSize);
+            const col = i % gridSize;
+            const symbol =
+              placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize
+                ? placedGrid[row][col]
+                : null;
+            return (
+              <div
+                key={i}
+                className="flex items-center justify-center rounded-md border-2 border-foreground/20 text-foreground"
+                style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+              >
+                {symbol ?? ''}
+              </div>
+            );
+          })}
         </div>
       </div>
 

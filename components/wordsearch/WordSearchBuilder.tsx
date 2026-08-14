@@ -4,10 +4,11 @@ import { useTheme } from '@/context/ThemeContext';
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
 import WordSearchGrid from './WordSearchGrid';
 import GridDimensionStepper from './GridDimensionStepper';
+import WordCountIndicator from './WordCountIndicator';
 import { WORD_LIST, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 import { getInitialWordSearchState, saveWordSearchState } from '@/lib/wordSearchStorage';
-import WordCountIndicator from './WordCountIndicator';
+import { generateWordSearchGrid } from '@/lib/wordSearchGenerator';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
@@ -23,23 +24,15 @@ export default function WordSearchBuilder() {
   const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>(initial.selectedWords);
   const [gridSize, setGridSize] = useState(initial.gridSize);
   const [scrollY, setScrollY] = useState(initial.scrollY);
+  const [placedGrid, setPlacedGrid] = useState<(string | null)[][] | null>(null);
   const hasRestoredScroll = useRef(false);
 
   const targetWordCount = getWordCountForGridSize(gridSize);
 
-  // Every path that can change selectedWords (manual row clicks inside
-  // PhonemeWordSelector, Randomise, Clear Word, Add Random) funnels through
-  // here — enforcing the cap in ONE place means manual selection can never
-  // exceed the current grid's required count, without needing to touch the
-  // shared component's internal row-click logic at all.
   const handleSelectedWordsChange = (words: PhonemeWordEntry[]) => {
     setSelectedWords(words.slice(0, targetWordCount));
   };
 
-  // Grid size changing invalidates any existing selection's "correctness"
-  // for the new target count, so start fresh rather than leaving a
-  // mismatched leftover list. Skipped on the very first render (mount),
-  // same guard pattern used elsewhere for restored-from-cookie state.
   const isFirstGridSizeEffect = useRef(true);
   useEffect(() => {
     if (isFirstGridSizeEffect.current) {
@@ -48,6 +41,22 @@ export default function WordSearchBuilder() {
     }
     setSelectedWords([]);
   }, [gridSize]);
+
+  // Compares the SET of words (sorted, joined), not array identity or
+  // order — so Randomise (which only reorders the same words) does NOT
+  // clear a built puzzle, but adding/removing a word does. This keeps a
+  // built grid's word positions stable across reordering, which matters
+  // once "found" tracking exists: a word's placement shouldn't shuffle
+  // just because the sidebar list re-sorted.
+  const prevWordSetRef = useRef<string>(
+    [...selectedWords.map((w) => w.word)].sort().join(',')
+  );
+  useEffect(() => {
+    const currentWordSet = [...selectedWords.map((w) => w.word)].sort().join(',');
+    if (currentWordSet === prevWordSetRef.current) return;
+    prevWordSetRef.current = currentWordSet;
+    setPlacedGrid(null);
+  }, [selectedWords]);
 
   const handleAddRandom = () => {
     const availableWords = WORD_LIST.filter(
@@ -60,24 +69,25 @@ export default function WordSearchBuilder() {
     }
 
     if (selectedWords.length >= targetWordCount) {
-      // Already full — clear out and replace with a brand new random set.
       setSelectedWords(shuffled.slice(0, targetWordCount));
     } else {
-      // Only top up the missing amount, keeping whatever's already selected.
       const remaining = targetWordCount - selectedWords.length;
       setSelectedWords([...selectedWords, ...shuffled.slice(0, remaining)]);
     }
   };
 
-  // Track scroll continuously from mount.
+  const handleBuildPuzzle = () => {
+    if (selectedWords.length !== targetWordCount) return;
+    const result = generateWordSearchGrid(selectedWords, gridSize);
+    setPlacedGrid(result.grid);
+  };
+
   useEffect(() => {
     const handleScroll = () => setScrollY(window.scrollY);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Restore once, waiting for fonts + polling until the page is tall
-  // enough to actually reach the saved position.
   useEffect(() => {
     if (initial.scrollY <= 0) return;
     if (hasRestoredScroll.current) return;
@@ -125,7 +135,7 @@ export default function WordSearchBuilder() {
       </div>
 
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
-        <h2 className="mb-6 text-lg font-semibold text-foreground">Configure Activity</h2>
+        <h2 className="mb-6 text-lg font-semibold text-foreground">Configure Game</h2>
         <PhonemeWordSelector
           selectedWords={selectedWords}
           onSelectedWordsChange={handleSelectedWordsChange}
@@ -137,10 +147,19 @@ export default function WordSearchBuilder() {
               <div className="mt-6 flex justify-center">
                 <button
                   type="button"
+                  onClick={handleBuildPuzzle}
                   disabled={selectedWords.length !== targetWordCount}
                   className="rounded-md bg-match px-4 py-2 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Build Puzzle
+                  {placedGrid ? 'Rebuild Puzzle' : 'Build Puzzle'}
+                </button>
+              </div>
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  className="rounded-md bg-word-reveal px-4 py-2 text-sm font-medium text-word-reveal-foreground hover:opacity-80"
+                >
+                  Generate .html Puzzle Page
                 </button>
               </div>
             </div>
@@ -154,11 +173,12 @@ export default function WordSearchBuilder() {
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
         <h2 className="mb-6 text-lg font-semibold text-foreground">Preview</h2>
         <WordSearchGrid
-        gridSize={gridSize}
-        selectedWords={selectedWords}
-        isDarkTheme={theme === 'dark'}
-        isHighContrast={highContrast}
-      />
+          gridSize={gridSize}
+          selectedWords={selectedWords}
+          placedGrid={placedGrid}
+          isDarkTheme={theme === 'dark'}
+          isHighContrast={highContrast}
+        />
       </div>
     </div>
   );

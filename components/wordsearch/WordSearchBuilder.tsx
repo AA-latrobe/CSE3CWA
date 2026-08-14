@@ -1,14 +1,15 @@
 'use client';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import PhonemeWordSelector from '@/components/shared/PhonemeWordSelector';
 import WordSearchGrid from './WordSearchGrid';
 import GridDimensionStepper from './GridDimensionStepper';
 import WordCountIndicator from './WordCountIndicator';
+import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import { WORD_LIST, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 import { getInitialWordSearchState, saveWordSearchState } from '@/lib/wordSearchStorage';
-import { generateWordSearchGrid } from '@/lib/wordSearchGenerator';
+import { generateWordSearchGrid, PlacedWord } from '@/lib/wordSearchGenerator';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
@@ -25,9 +26,19 @@ export default function WordSearchBuilder() {
   const [gridSize, setGridSize] = useState(initial.gridSize);
   const [scrollY, setScrollY] = useState(initial.scrollY);
   const [placedGrid, setPlacedGrid] = useState<(string | null)[][] | null>(null);
+  const [placedWords, setPlacedWords] = useState<PlacedWord[]>([]);
+  const [revealWords, setRevealWords] = useState(true);
   const hasRestoredScroll = useRef(false);
 
   const targetWordCount = getWordCountForGridSize(gridSize);
+
+  const wordCellKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const pw of placedWords) {
+      for (const cell of pw.cells) set.add(`${cell.row},${cell.col}`);
+    }
+    return set;
+  }, [placedWords]);
 
   const handleSelectedWordsChange = (words: PhonemeWordEntry[]) => {
     setSelectedWords(words.slice(0, targetWordCount));
@@ -42,12 +53,6 @@ export default function WordSearchBuilder() {
     setSelectedWords([]);
   }, [gridSize]);
 
-  // Compares the SET of words (sorted, joined), not array identity or
-  // order — so Randomise (which only reorders the same words) does NOT
-  // clear a built puzzle, but adding/removing a word does. This keeps a
-  // built grid's word positions stable across reordering, which matters
-  // once "found" tracking exists: a word's placement shouldn't shuffle
-  // just because the sidebar list re-sorted.
   const prevWordSetRef = useRef<string>(
     [...selectedWords.map((w) => w.word)].sort().join(',')
   );
@@ -56,6 +61,7 @@ export default function WordSearchBuilder() {
     if (currentWordSet === prevWordSetRef.current) return;
     prevWordSetRef.current = currentWordSet;
     setPlacedGrid(null);
+    setPlacedWords([]);
   }, [selectedWords]);
 
   const handleAddRandom = () => {
@@ -80,6 +86,7 @@ export default function WordSearchBuilder() {
     if (selectedWords.length !== targetWordCount) return;
     const result = generateWordSearchGrid(selectedWords, gridSize);
     setPlacedGrid(result.grid);
+    setPlacedWords(result.placedWords);
   };
 
   useEffect(() => {
@@ -171,11 +178,19 @@ export default function WordSearchBuilder() {
       </div>
 
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
-        <h2 className="mb-6 text-lg font-semibold text-foreground">Preview</h2>
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Preview</h2>
+          <div className="flex items-center gap-3 rounded-md border border-foreground/10 px-3 py-2">
+            <span className="whitespace-nowrap text-sm text-foreground">Reveal Words</span>
+            <ToggleSwitch checked={revealWords} onChange={setRevealWords} />
+          </div>
+        </div>
         <WordSearchGrid
           gridSize={gridSize}
           selectedWords={selectedWords}
           placedGrid={placedGrid}
+          wordCellKeys={wordCellKeys}
+          revealWords={revealWords}
           isDarkTheme={theme === 'dark'}
           isHighContrast={highContrast}
         />

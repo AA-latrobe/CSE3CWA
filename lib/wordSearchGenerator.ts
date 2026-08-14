@@ -1,4 +1,6 @@
 import { PhonemeWordEntry } from './phonemeData';
+import { KEYPAD_TOP, KEYPAD_BOTTOM } from './phonemeData';
+
 
 type Orientation = 'horizontal' | 'vertical' | 'diagonal';
 
@@ -33,6 +35,14 @@ export interface WordSearchResult {
 
 const MAX_ATTEMPTS_PER_WORD = 300;
 
+const ALL_PHONEME_SYMBOLS = [...KEYPAD_TOP, ...KEYPAD_BOTTOM]
+  .flat()
+  .filter((symbol): symbol is string => symbol !== '');
+
+function randomPhoneme(): string {
+  return ALL_PHONEME_SYMBOLS[randomInt(0, ALL_PHONEME_SYMBOLS.length - 1)];
+}
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -51,6 +61,16 @@ export function generateWordSearchGrid(words: PhonemeWordEntry[], gridSize: numb
     const path = tryPlaceWord(cells, entry, gridSize);
     if (path) placedWords.push({ word: entry.word, cells: path });
     else unplacedWords.push(entry.word);
+  }
+
+  // Fill every still-empty cell with a random phoneme, so the finished
+  // grid has no visible gaps — same as a real word search's filler letters.
+  for (let row = 0; row < gridSize; row++) {
+    for (let col = 0; col < gridSize; col++) {
+      if (cells[row][col].symbol === null) {
+        cells[row][col].symbol = randomPhoneme();
+      }
+    }
   }
 
   const grid = cells.map((row) => row.map((cell) => cell.symbol));

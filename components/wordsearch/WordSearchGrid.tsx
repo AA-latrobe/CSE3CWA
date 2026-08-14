@@ -15,6 +15,8 @@ type Props = {
   gridSize: number;
   selectedWords: PhonemeWordEntry[];
   placedGrid: (string | null)[][] | null;
+  wordCellKeys: Set<string>; // "row,col" strings for every cell that's part of a placed word
+  revealWords: boolean;
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
@@ -23,6 +25,8 @@ export default function WordSearchGrid({
   gridSize,
   selectedWords,
   placedGrid,
+  wordCellKeys,
+  revealWords,
   isDarkTheme,
   isHighContrast,
 }: Props) {
@@ -61,14 +65,27 @@ export default function WordSearchGrid({
           {Array.from({ length: gridSize * gridSize }).map((_, i) => {
             const row = Math.floor(i / gridSize);
             const col = i % gridSize;
-            const symbol =
-              placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize
-                ? placedGrid[row][col]
-                : null;
+
+            // Defensive check: placedGrid may briefly still have the OLD grid's
+            // dimensions for one render after gridSize changes, before the
+            // clearing effect in WordSearchBuilder has run. Without this guard,
+            // reading placedGrid[row][col] against the new (larger) gridSize can
+            // index past the old grid's actual size and throw.
+            const gridIsValidSize = placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
+
+            const symbol = gridIsValidSize ? placedGrid![row][col] : null;
+            const isWordCell = gridIsValidSize ? wordCellKeys.has(`${row},${col}`) : false;
+
+            const cellColorClass = !gridIsValidSize
+              ? 'border-2 border-foreground/20'
+              : isWordCell && revealWords
+              ? 'bg-key-used text-key-used-foreground'
+              : 'bg-key text-key-foreground';
+
             return (
               <div
                 key={i}
-                className="flex items-center justify-center rounded-md border-2 border-foreground/20 text-foreground"
+                className={`flex items-center justify-center rounded-md ${cellColorClass}`}
                 style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
               >
                 {symbol ?? ''}

@@ -2,9 +2,11 @@
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import { useHintFlip } from '@/lib/useHintFlip';
 import { useSelectionReleaseFlip } from '@/lib/useSelectionReleaseFlip';
-import { useEffect, useRef, useState } from 'react';
+import { matchDragToWord } from '@/lib/wordSearchMatching';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import WordSearchWordListPreview from './WordSearchWordListPreview';
+import type { SolveState } from './WordSearchBuilder';
 import { PhonemeWordEntry, getPhonemeHoverText } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 
@@ -15,25 +17,28 @@ const LEFT_COL_WIDTH = 176;
 const ROW_GAP = 24;
 
 type HintState = { word: string; phonemeIndex: number; nonce: number } | null;
+type Cell = { row: number; col: number };
+type SolveCellInfo = { flipping: boolean; revealed: boolean } | null;
 
 type Props = {
   gridSize: number;
   selectedWords: PhonemeWordEntry[];
   placedGrid: (string | null)[][] | null;
   wordCellKeys: Set<string>;
+  wordPhonemeCells: Record<string, Cell[]>;
   hintCell: { row: number; col: number; token: string } | null;
   revealWords: boolean;
   placedWordSet: Set<string>;
   hint: HintState;
   onHintClick: (entry: PhonemeWordEntry) => void;
+  foundWords: Set<string>;
+  solves: SolveState[];
+  onWordMatched: (word: string) => void;
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
 
-function computeStraightPath(
-  start: { row: number; col: number },
-  end: { row: number; col: number }
-): { row: number; col: number }[] | null {
+function computeStraightPath(start: Cell, end: Cell): Cell[] | null {
   const dRow = end.row - start.row;
   const dCol = end.col - start.col;
   if (dRow === 0 && dCol === 0) return [start];
@@ -60,6 +65,8 @@ function GridCellView({
   hintTriggerId,
   liveSelected,
   releaseToken,
+  isFoundCell,
+  solveInfo,
   cellSize,
   onMouseDown,
   onMouseEnter,
@@ -70,6 +77,8 @@ function GridCellView({
   hintTriggerId: string | null;
   liveSelected: boolean;
   releaseToken: string | null;
+  isFoundCell: boolean;
+  solveInfo: SolveCellInfo;
   cellSize: number;
   onMouseDown: () => void;
   onMouseEnter: () => void;
@@ -77,14 +86,39 @@ function GridCellView({
   const { flipping: hintFlipping, revealed: hintRevealed } = useHintFlip(hintTriggerId);
   const { flipping: selFlipping, highlighted: selHighlighted } = useSelectionReleaseFlip(releaseToken);
 
-  const isFlipping = hintFlipping || selFlipping;
-  const isYellow = liveSelected || selHighlighted || hintRevealed;
+  // "True" state — what this cell should show when nothing is being
+  // dragged/held over it.
+  let baseColorClass: string;
+  let baseFlipping: boolean;
+  if (solveInfo) {
+    baseColorClass = solveInfo.revealed ? 'bg-match text-match-foreground' : 'bg-partial text-partial-foreground';
+    baseFlipping = solveInfo.flipping;
+  } else if (isFoundCell) {
+    baseColorClass = 'bg-match text-match-foreground';
+    baseFlipping = false;
+  } else {
+    baseFlipping = hintFlipping;
+    baseColorClass = hintRevealed
+      ? 'bg-partial text-partial-foreground'
+      : isWordCell && revealWords
+      ? 'bg-key-used text-key-used-foreground'
+      : 'bg-key text-key-foreground';
+  }
 
-  const colorClass = isYellow
-    ? 'bg-partial text-partial-foreground'
-    : isWordCell && revealWords
-    ? 'bg-key-used text-key-used-foreground'
-    : 'bg-key text-key-foreground';
+  // Selection overlay ALWAYS takes visual priority — dragging or holding
+  // over a cell shows yellow instantly regardless of what's underneath
+  // (including an already-found green cell), and only the final "flip
+  // back" step reveals whatever the true state actually is.
+  let colorClass = baseColorClass;
+  let isFlipping = baseFlipping;
+
+  if (liveSelected || selHighlighted) {
+    colorClass = 'bg-partial text-partial-foreground';
+    isFlipping = selHighlighted ? selFlipping : false;
+  } else if (selFlipping) {
+    colorClass = baseColorClass;
+    isFlipping = true;
+  }
 
   return (
     <div style={{ perspective: '400px' }}>
@@ -109,11 +143,15 @@ export default function WordSearchGrid({
   selectedWords,
   placedGrid,
   wordCellKeys,
+  wordPhonemeCells,
   hintCell,
   revealWords,
   placedWordSet,
   hint,
   onHintClick,
+  foundWords,
+  solves,
+  onWordMatched,
   isDarkTheme,
   isHighContrast,
 }: Props) {
@@ -133,13 +171,35 @@ export default function WordSearchGrid({
       ? Math.max(MIN_CELL_SIZE, (availableWidth - (gridSize - 1) * MIN_GAP) / gridSize)
       : MAX_CELL_SIZE;
 
-  // --- play-selection state ---
+  const foundCellKeys = useMemo(() => {
+    const set = new Set<string>();
+    for (const word of foundWords) {
+      const cells = wordPhonemeCells[word];
+      if (!cells) continue;
+      for (const cell of cells) set.add(`${cell.row},${cell.col}`);
+    }
+    return set;
+  }, [foundWords, wordPhonemeCells]);
+
+  // Maps every cell currently involved in ANY active solve to that
+  // solve's state + this cell's index within it — supports multiple
+  // concurrent solves without one overwriting another's lookup.
+  const solveCellMap = useMemo(() => {
+    const map = new Map<string, { solve: SolveState; index: number }>();
+    for (const s of solves) {
+      const cells = wordPhonemeCells[s.word];
+      if (!cells) continue;
+      cells.forEach((c, i) => map.set(`${c.row},${c.col}`, { solve: s, index: i }));
+    }
+    return map;
+  }, [solves, wordPhonemeCells]);
+
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragPath, setDragPath] = useState<{ row: number; col: number }[]>([]);
+  const [dragPath, setDragPath] = useState<Cell[]>([]);
   const [releaseInfo, setReleaseInfo] = useState<{ cells: Set<string>; token: string } | null>(null);
-  const dragStartRef = useRef<{ row: number; col: number } | null>(null);
-  const dragPathRef = useRef<{ row: number; col: number }[]>([]);
+  const dragStartRef = useRef<Cell | null>(null);
+  const dragPathRef = useRef<Cell[]>([]);
   const isDraggingRef = useRef(false);
   const releaseCounter = useRef(0);
 
@@ -151,6 +211,28 @@ export default function WordSearchGrid({
   }, [isDragging]);
 
   useEffect(() => {
+    function onMouseUp() {
+      if (!isDraggingRef.current) return;
+      setIsDragging(false);
+      const cells = dragPathRef.current;
+      setDragPath([]);
+      dragStartRef.current = null;
+
+      const matchedWord = matchDragToWord(cells, wordPhonemeCells, foundWords);
+      if (matchedWord) {
+        onWordMatched(matchedWord);
+        return;
+      }
+
+      const cellsSet = new Set(cells.map((c) => `${c.row},${c.col}`));
+      releaseCounter.current += 1;
+      setReleaseInfo({ cells: cellsSet, token: `sel-${releaseCounter.current}` });
+    }
+    window.addEventListener('mouseup', onMouseUp);
+    return () => window.removeEventListener('mouseup', onMouseUp);
+  }, [wordPhonemeCells, foundWords, onWordMatched]);
+
+  useEffect(() => {
     setIsDragging(false);
     setDragPath([]);
     setReleaseInfo(null);
@@ -158,29 +240,12 @@ export default function WordSearchGrid({
     dragStartRef.current = null;
   }, [placedGrid]);
 
-  // Global listener: catches mouse release even if it happens outside the
-  // grid (or outside the browser window entirely, in most browsers).
-  useEffect(() => {
-    function onMouseUp() {
-      if (!isDraggingRef.current) return;
-      setIsDragging(false);
-      const cells = dragPathRef.current;
-      const cellsSet = new Set(cells.map((c) => `${c.row},${c.col}`));
-      releaseCounter.current += 1;
-      setReleaseInfo({ cells: cellsSet, token: `sel-${releaseCounter.current}` });
-      setDragPath([]);
-      dragStartRef.current = null;
-    }
-    window.addEventListener('mouseup', onMouseUp);
-    return () => window.removeEventListener('mouseup', onMouseUp);
-  }, []);
-
   const handleCellMouseDown = (row: number, col: number) => {
     if (!placedGrid) return;
     setIsDragging(true);
     dragStartRef.current = { row, col };
     setDragPath([{ row, col }]);
-    setReleaseInfo(null); // cancel any pending release-hold immediately, no lingering flip
+    setReleaseInfo(null);
     setHoverKey(null);
   };
 
@@ -188,7 +253,7 @@ export default function WordSearchGrid({
     if (!placedGrid) return;
     if (isDragging && dragStartRef.current) {
       const path = computeStraightPath(dragStartRef.current, { row, col });
-      if (path) setDragPath(path); // invalid (non-straight) moves simply keep the last valid path
+      if (path) setDragPath(path);
     } else {
       setHoverKey(`${row},${col}`);
     }
@@ -203,6 +268,8 @@ export default function WordSearchGrid({
         placedWordSet={placedWordSet}
         hint={hint}
         onHintClick={onHintClick}
+        foundWords={foundWords}
+        solves={solves}
       />
     </div>
   );
@@ -242,7 +309,16 @@ export default function WordSearchGrid({
             const key = `${row},${col}`;
             const symbol = placedGrid![row][col];
             const isWordCell = wordCellKeys.has(key);
+            const isFoundCell = foundCellKeys.has(key);
             const hintTriggerId = hintCell && hintCell.row === row && hintCell.col === col ? hintCell.token : null;
+
+            const solveEntry = solveCellMap.get(key);
+            const solveInfo: SolveCellInfo = solveEntry
+              ? {
+                  flipping: solveEntry.solve.letterFlipping[solveEntry.index],
+                  revealed: solveEntry.solve.letterRevealed[solveEntry.index],
+                }
+              : null;
 
             const liveSelected = isDragging
               ? dragPath.some((c) => c.row === row && c.col === col)
@@ -258,6 +334,8 @@ export default function WordSearchGrid({
                 hintTriggerId={hintTriggerId}
                 liveSelected={liveSelected}
                 releaseToken={releaseToken}
+                isFoundCell={isFoundCell}
+                solveInfo={solveInfo}
                 cellSize={cellSize}
                 onMouseDown={() => handleCellMouseDown(row, col)}
                 onMouseEnter={() => handleCellMouseEnter(row, col)}

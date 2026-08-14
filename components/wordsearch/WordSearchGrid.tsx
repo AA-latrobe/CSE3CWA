@@ -1,8 +1,10 @@
 'use client';
 import { useContainerWidth } from '@/lib/useContainerWidth';
+import { useHintFlip } from '@/lib/useHintFlip';
+import { useSelectionReleaseFlip } from '@/lib/useSelectionReleaseFlip';
+import { useEffect, useRef, useState } from 'react';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import WordSearchWordListPreview from './WordSearchWordListPreview';
-import { useHintFlip } from '../../lib/useHintFlip';
 import { PhonemeWordEntry, getPhonemeHoverText } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 
@@ -28,22 +30,57 @@ type Props = {
   isHighContrast: boolean;
 };
 
+function computeStraightPath(
+  start: { row: number; col: number },
+  end: { row: number; col: number }
+): { row: number; col: number }[] | null {
+  const dRow = end.row - start.row;
+  const dCol = end.col - start.col;
+  if (dRow === 0 && dCol === 0) return [start];
+
+  const isHorizontal = dRow === 0;
+  const isVertical = dCol === 0;
+  const isDiagonal = Math.abs(dRow) === Math.abs(dCol);
+  if (!isHorizontal && !isVertical && !isDiagonal) return null;
+
+  const steps = Math.max(Math.abs(dRow), Math.abs(dCol));
+  const stepRow = Math.sign(dRow);
+  const stepCol = Math.sign(dCol);
+
+  return Array.from({ length: steps + 1 }, (_, i) => ({
+    row: start.row + stepRow * i,
+    col: start.col + stepCol * i,
+  }));
+}
+
 function GridCellView({
   symbol,
   isWordCell,
   revealWords,
-  triggerId,
+  hintTriggerId,
+  liveSelected,
+  releaseToken,
   cellSize,
+  onMouseDown,
+  onMouseEnter,
 }: {
   symbol: string | null;
   isWordCell: boolean;
   revealWords: boolean;
-  triggerId: string | null;
+  hintTriggerId: string | null;
+  liveSelected: boolean;
+  releaseToken: string | null;
   cellSize: number;
+  onMouseDown: () => void;
+  onMouseEnter: () => void;
 }) {
-  const { flipping, revealed } = useHintFlip(triggerId);
+  const { flipping: hintFlipping, revealed: hintRevealed } = useHintFlip(hintTriggerId);
+  const { flipping: selFlipping, highlighted: selHighlighted } = useSelectionReleaseFlip(releaseToken);
 
-  const colorClass = revealed
+  const isFlipping = hintFlipping || selFlipping;
+  const isYellow = liveSelected || selHighlighted || hintRevealed;
+
+  const colorClass = isYellow
     ? 'bg-partial text-partial-foreground'
     : isWordCell && revealWords
     ? 'bg-key-used text-key-used-foreground'
@@ -53,9 +90,12 @@ function GridCellView({
     <div style={{ perspective: '400px' }}>
       <div
         title={symbol ? getPhonemeHoverText(symbol) : undefined}
-        className={`flex items-center justify-center rounded-md ${colorClass} ${
-          flipping ? 'animate-tile-flip' : ''
-        }`}
+        onMouseDown={onMouseDown}
+        onMouseEnter={onMouseEnter}
+        onDragStart={(e) => e.preventDefault()}
+        className={`flex select-none items-center justify-center rounded-md ${colorClass} ${
+          isFlipping ? 'animate-tile-flip' : ''
+        } cursor-pointer`}
         style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
       >
         {symbol ?? ''}
@@ -93,6 +133,67 @@ export default function WordSearchGrid({
       ? Math.max(MIN_CELL_SIZE, (availableWidth - (gridSize - 1) * MIN_GAP) / gridSize)
       : MAX_CELL_SIZE;
 
+  // --- play-selection state ---
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragPath, setDragPath] = useState<{ row: number; col: number }[]>([]);
+  const [releaseInfo, setReleaseInfo] = useState<{ cells: Set<string>; token: string } | null>(null);
+  const dragStartRef = useRef<{ row: number; col: number } | null>(null);
+  const dragPathRef = useRef<{ row: number; col: number }[]>([]);
+  const isDraggingRef = useRef(false);
+  const releaseCounter = useRef(0);
+
+  useEffect(() => {
+    dragPathRef.current = dragPath;
+  }, [dragPath]);
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
+
+  useEffect(() => {
+    setIsDragging(false);
+    setDragPath([]);
+    setReleaseInfo(null);
+    setHoverKey(null);
+    dragStartRef.current = null;
+  }, [placedGrid]);
+
+  // Global listener: catches mouse release even if it happens outside the
+  // grid (or outside the browser window entirely, in most browsers).
+  useEffect(() => {
+    function onMouseUp() {
+      if (!isDraggingRef.current) return;
+      setIsDragging(false);
+      const cells = dragPathRef.current;
+      const cellsSet = new Set(cells.map((c) => `${c.row},${c.col}`));
+      releaseCounter.current += 1;
+      setReleaseInfo({ cells: cellsSet, token: `sel-${releaseCounter.current}` });
+      setDragPath([]);
+      dragStartRef.current = null;
+    }
+    window.addEventListener('mouseup', onMouseUp);
+    return () => window.removeEventListener('mouseup', onMouseUp);
+  }, []);
+
+  const handleCellMouseDown = (row: number, col: number) => {
+    if (!placedGrid) return;
+    setIsDragging(true);
+    dragStartRef.current = { row, col };
+    setDragPath([{ row, col }]);
+    setReleaseInfo(null); // cancel any pending release-hold immediately, no lingering flip
+    setHoverKey(null);
+  };
+
+  const handleCellMouseEnter = (row: number, col: number) => {
+    if (!placedGrid) return;
+    if (isDragging && dragStartRef.current) {
+      const path = computeStraightPath(dragStartRef.current, { row, col });
+      if (path) setDragPath(path); // invalid (non-straight) moves simply keep the last valid path
+    } else {
+      setHoverKey(`${row},${col}`);
+    }
+  };
+
   const wordList = (
     <div className="w-44 flex-shrink-0">
       <WordSearchWordListPreview
@@ -108,7 +209,12 @@ export default function WordSearchGrid({
 
   const grid = (
     <div>
-      <div className="flex justify-center">
+      <div
+        className="flex justify-center"
+        onMouseLeave={() => {
+          if (!isDragging) setHoverKey(null);
+        }}
+      >
         <div
           className="grid"
           style={{
@@ -133,10 +239,15 @@ export default function WordSearchGrid({
               );
             }
 
+            const key = `${row},${col}`;
             const symbol = placedGrid![row][col];
-            const isWordCell = wordCellKeys.has(`${row},${col}`);
-            const triggerId =
-              hintCell && hintCell.row === row && hintCell.col === col ? hintCell.token : null;
+            const isWordCell = wordCellKeys.has(key);
+            const hintTriggerId = hintCell && hintCell.row === row && hintCell.col === col ? hintCell.token : null;
+
+            const liveSelected = isDragging
+              ? dragPath.some((c) => c.row === row && c.col === col)
+              : hoverKey === key;
+            const releaseToken = releaseInfo && releaseInfo.cells.has(key) ? releaseInfo.token : null;
 
             return (
               <GridCellView
@@ -144,8 +255,12 @@ export default function WordSearchGrid({
                 symbol={symbol}
                 isWordCell={isWordCell}
                 revealWords={revealWords}
-                triggerId={triggerId}
+                hintTriggerId={hintTriggerId}
+                liveSelected={liveSelected}
+                releaseToken={releaseToken}
                 cellSize={cellSize}
+                onMouseDown={() => handleCellMouseDown(row, col)}
+                onMouseEnter={() => handleCellMouseEnter(row, col)}
               />
             );
           })}

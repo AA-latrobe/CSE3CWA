@@ -15,9 +15,15 @@ type Props = {
   selectedWords: PhonemeWordEntry[];
   onSelectedWordsChange: (words: PhonemeWordEntry[]) => void;
   footerSlot?: React.ReactNode;
-  // Lets different activity types (Wordle, Word Search) each remember
-  // their own search independently rather than sharing one cookie.
   searchStorageKey?: string;
+  addButtonLabel?: string;
+  onAddButtonClick?: (filteredWords: PhonemeWordEntry[]) => void;
+  // When true, the add button also disables itself whenever a phoneme
+  // search is active — Word Search needs this (its "Add Random" logic
+  // ignores filtering entirely, so a filtered click would be misleading);
+  // Wordle's "Add All" intentionally does NOT set this, since adding
+  // exactly the filtered subset is its whole purpose.
+  disableAddWhenFiltered?: boolean;
 };
 
 type CellColor = 'empty' | 'grey' | 'yellow' | 'green';
@@ -65,6 +71,9 @@ export default function PhonemeWordSelector({
   onSelectedWordsChange,
   footerSlot,
   searchStorageKey = DEFAULT_SEARCH_STORAGE_KEY,
+  addButtonLabel,
+  onAddButtonClick,
+  disableAddWhenFiltered = false,
 }: Props) {
   const { ref: rowRef, isWide: rowWide } = useContainerWidth<HTMLDivElement>(560);
 
@@ -209,7 +218,7 @@ export default function PhonemeWordSelector({
 
   return (
     <div ref={rowRef} className={`flex gap-8 ${rowWide ? 'flex-row items-start' : 'flex-col items-stretch'}`}>
-      <div className="flex w-full max-w-[350px] flex-shrink-0 flex-col gap-6">
+      <div className="flex w-full max-w-[350px] flex-shrink-0 flex-col">
         <div>
           <label className="mb-2 block text-sm font-medium text-foreground">
             Search by Phoneme
@@ -235,7 +244,7 @@ export default function PhonemeWordSelector({
           </div>
         </div>
 
-        <div>
+        <div className="mt-6 mb-3">
           <label className="mb-2 block text-sm font-medium text-foreground">
             Word List ({listRows.length})
           </label>
@@ -268,6 +277,19 @@ export default function PhonemeWordSelector({
               </button>
             ))}
           </div>
+
+          {addButtonLabel && onAddButtonClick && (
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={() => onAddButtonClick(listRows.map((row) => row.entry))}
+                disabled={listRows.length === 0 || (disableAddWhenFiltered && searchPhonemes.length > 0)}
+                className="rounded-md bg-key px-3 py-1.5 text-sm font-medium text-key-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {addButtonLabel}
+              </button>
+            </div>
+          )}
         </div>
 
         <div>

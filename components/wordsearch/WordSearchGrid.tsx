@@ -3,6 +3,7 @@ import { useContainerWidth } from '@/lib/useContainerWidth';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import WordSearchWordListPreview from './WordSearchWordListPreview';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
+import { PhonemeWordEntry } from '@/lib/phonemeData';
 
 const MAX_CELL_SIZE = 40;
 const MIN_CELL_SIZE = 24;
@@ -12,11 +13,12 @@ const ROW_GAP = 24;
 
 type Props = {
   gridSize: number;
+  selectedWords: PhonemeWordEntry[];
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
 
-export default function WordSearchGrid({ gridSize, isDarkTheme, isHighContrast }: Props) {
+export default function WordSearchGrid({ gridSize, selectedWords, isDarkTheme, isHighContrast }: Props) {
   // All grid-size-dependent widths now derive from the gridSize prop
   // rather than a fixed constant, so the side-by-side threshold and
   // shrink calculations stay correct at every size the stepper allows.
@@ -38,7 +40,7 @@ export default function WordSearchGrid({ gridSize, isDarkTheme, isHighContrast }
 
   const wordList = (
     <div className="w-44 flex-shrink-0">
-      <WordSearchWordListPreview count={getWordCountForGridSize(gridSize)} />
+      <WordSearchWordListPreview words={selectedWords} count={getWordCountForGridSize(gridSize)} />
     </div>
   );
 

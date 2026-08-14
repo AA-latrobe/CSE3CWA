@@ -22,6 +22,7 @@ import {
 import { KEYPAD_TOP, KEYPAD_BOTTOM, PREVIEW_TITLE_PHONEMES, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getInitialWordleState, saveWordleState } from '@/lib/wordleStorage';
 import { downloadStandaloneWordleHtml } from '@/lib/wordleExport';
+import { WORD_LIST } from '@/lib/phonemeData';
 
 const MIN_GUESSES = 3;
 const MAX_GUESSES = 10;
@@ -240,6 +241,10 @@ export default function WordleBuilder() {
     setCurrentGuess([]);
   };
 
+  const handleAddAll = (filteredWords: PhonemeWordEntry[]) => {
+    setSelectedWords([...selectedWords, ...filteredWords]);
+  };
+
   const handlePlayNextWord = () => {
     if (!isGameOver) return;
 
@@ -294,6 +299,8 @@ export default function WordleBuilder() {
               </div>
             </div>
           }
+          addButtonLabel="Add All"
+          onAddButtonClick={handleAddAll}
         />
       </div>
 

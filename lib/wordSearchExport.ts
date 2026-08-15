@@ -1,0 +1,920 @@
+import { PhonemeWordEntry, KEYPAD_TOP, KEYPAD_BOTTOM, WORD_LIST } from './phonemeData';
+import { GREAT_WORD_POSITIONS } from './wordSearchData';
+
+function formatTimestamp(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(
+    d.getMinutes()
+  )}${pad(d.getSeconds())}`;
+}
+
+export function downloadStandaloneWordSearchHtml(words: PhonemeWordEntry[], gridSize: number) {
+  const html = generateStandaloneWordSearchHtml(words, gridSize);
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `word_search_${formatTimestamp()}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function generateStandaloneWordSearchHtml(words: PhonemeWordEntry[], gridSize: number): string {
+  const wordDataJson = JSON.stringify(words);
+  const keypadTopJson = JSON.stringify(KEYPAD_TOP);
+  const keypadBottomJson = JSON.stringify(KEYPAD_BOTTOM);
+  const greatEntry = WORD_LIST.find((w) => w.word === 'great');
+  const greatPhonemesJson = JSON.stringify(greatEntry ? greatEntry.phonemes : []);
+  const greatPositionsJson = JSON.stringify(GREAT_WORD_POSITIONS);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoneme Word Search</title>
+<style>
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --accent: #6aaa64;
+  --key: #d3d6da;
+  --key-foreground: #1a1a1a;
+  --key-used: #86888a;
+  --key-used-foreground: #ffffff;
+  --match: #6aaa64;
+  --match-foreground: #ffffff;
+  --partial: #c9b458;
+  --partial-foreground: #ffffff;
+  --word-reveal: #a8dced;
+  --word-reveal-foreground: #111111;
+  --page-background: #f3f4f6;
+}
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --accent: #538d4e;
+  --key: #565758;
+  --key-foreground: #f0f0f0;
+  --key-used: #2b2b2c;
+  --key-used-foreground: #a0a0a0;
+  --match: #538d4e;
+  --match-foreground: #ffffff;
+  --partial: #b59f3b;
+  --partial-foreground: #ffffff;
+  --page-background: #000000;
+}
+.high-contrast {
+  --match: #f5793a;
+  --match-foreground: #111111;
+  --partial: #85c0f9;
+  --partial-foreground: #111111;
+  --accent: #f5793a;
+  --word-reveal: #b980f0;
+  --word-reveal-foreground: #111111;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--page-background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+.panel {
+  max-width: 1000px;
+  margin: 2rem auto;
+  background: var(--background);
+  border: 1px solid rgba(128,128,128,0.15);
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+}
+.title-row { display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-top: 52px; margin-bottom: 44px; width: 396px; margin-left: auto; margin-right: auto; }
+.title-tile {
+  width:40px; height:40px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
+  font-size:1rem; font-weight:500; border:2px solid rgba(128,128,128,0.2); color: var(--foreground);
+  background: var(--background); perspective: 400px;
+}
+.title-tile.grey { border:none; background: var(--key); color: var(--key-foreground); }
+.title-tile.yellow { background: var(--partial); color: var(--partial-foreground); border-color: transparent; }
+.title-tile.green { background: var(--match); color: var(--match-foreground); border-color: transparent; }
+.subtitle-row { display:flex; align-items:center; justify-content:center; gap:4px; font-size:1.125rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
+.title-word-box {
+  width:128px; height:40px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
+  font-size:1.125rem; font-weight:600; border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground);
+  perspective:400px;
+}
+.title-word-box.blue { background: var(--word-reveal); color: var(--word-reveal-foreground); border-color: transparent; }
+.title-word-box.solved { border: 2px solid var(--word-reveal); background: var(--background); color: var(--foreground); text-decoration: line-through; }
+
+.game-row { display:flex; gap:24px; flex-wrap: wrap; }
+.wordlist-col { width:176px; flex-shrink:0; }
+.wordlist-title { font-size:0.875rem; font-weight:500; margin-bottom:8px; }
+.word-group { margin-bottom: 8px; }
+.word-row { display:flex; gap:4px; margin-bottom:4px; }
+.hint-box, .ph-slot {
+  width:26px; height:26px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
+  font-size:0.875rem; font-weight:500; perspective:400px;
+}
+.hidden-spacer { width:26px; height:26px; }
+.hidden-spacer-wide { height:26px; margin-left:30px; }
+.eng-box { height:26px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center; font-weight:600; margin-left:30px; perspective:400px; }
+
+.ph-slot.empty, .hint-box.empty-border { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground); }
+.ph-slot.green { background: var(--match); color: var(--match-foreground); }
+.ph-slot.yellow { background: var(--partial); color: var(--partial-foreground); }
+.hint-box.qmark { background: var(--partial); color: var(--partial-foreground); cursor: pointer; border: none; }
+.hint-box.tick { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--match); }
+.eng-box.blue { background: var(--word-reveal); color: var(--word-reveal-foreground); }
+.eng-box.solved { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground); text-decoration: line-through; }
+
+.grid-col { flex:1; min-width:0; }
+.gcell {
+  border-radius:0.375rem; display:flex; align-items:center; justify-content:center; font-weight:500;
+  cursor:pointer; user-select:none; perspective:400px; font-size:1rem;
+}
+.gcell.empty { border:2px solid rgba(128,128,128,0.2); background: var(--background); cursor:default; }
+.gcell.grey { background: var(--key); color: var(--key-foreground); }
+.gcell.green { background: var(--match); color: var(--match-foreground); }
+.gcell.yellow { background: var(--partial); color: var(--partial-foreground); }
+.gcell.finale-green-border { border:2px solid var(--match); background: var(--background); cursor:default; }
+.gcell.finale-blue-border { border:2px solid var(--word-reveal); background: var(--background); cursor:default; }
+.gcell.finale-hidden { border:2px solid transparent; background: transparent; cursor:default; }
+.great-box {
+  border-radius:0.375rem; display:flex; align-items:center; justify-content:center; font-weight:600; perspective:400px;
+}
+.great-box.hidden { border:2px solid transparent; background: transparent; }
+.great-box.revealed { background: var(--word-reveal); color: var(--word-reveal-foreground); }
+
+.toggles-row { margin-top:24px; display:flex; align-items:center; justify-content:center; gap:32px; }
+.control-box { border:1px solid rgba(128,128,128,0.15); border-radius:0.375rem; padding:8px 12px; display:flex; align-items:center; gap:12px; }
+.switch { position:relative; width:44px; height:24px; flex-shrink:0; }
+.switch input { opacity:0; width:0; height:0; }
+.slider { position:absolute; inset:0; background: rgba(128,128,128,0.3); border-radius:999px; cursor:pointer; transition:.2s; }
+.slider:before { content:""; position:absolute; height:18px; width:18px; left:3px; top:3px; background:white; border-radius:50%; transition:.2s; }
+input:checked + .slider { background: var(--accent); }
+input:checked + .slider:before { transform: translateX(20px); }
+
+.tile-flip { animation: flip 0.5s ease-in-out; }
+@keyframes flip { 0% { transform: rotateX(0deg); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0deg); } }
+
+@media (max-width: 700px) {
+  .game-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="panel">
+  <div class="title-row" id="titleRow"></div>
+  <div class="subtitle-row" id="subtitleRow">
+    <span>A Phoneme</span>
+    <div class="title-word-box" id="titleWordBox"></div>
+    <div class="title-word-box" id="titleSearchBox"></div>
+    <span>Game</span>
+  </div>
+  <div class="game-row">
+    <div class="wordlist-col">
+      <p class="wordlist-title">Word List:</p>
+      <div id="wordListCol"></div>
+    </div>
+    <div class="grid-col">
+      <div id="gridWrap" style="display:flex; justify-content:center;">
+        <div id="grid" style="display:grid; gap:4px;"></div>
+      </div>
+      <div class="toggles-row">
+        <div class="control-box">
+          <span>Dark Theme</span>
+          <label class="switch"><input type="checkbox" id="darkThemeToggle"><span class="slider"></span></label>
+        </div>
+        <div class="control-box">
+          <span>High Contrast</span>
+          <label class="switch"><input type="checkbox" id="highContrastToggle"><span class="slider"></span></label>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var WORD_DATA = ${wordDataJson};
+  var GRID_SIZE = ${gridSize};
+  var KEYPAD_TOP = ${keypadTopJson};
+  var KEYPAD_BOTTOM = ${keypadBottomJson};
+  var GREAT_PHONEMES = ${greatPhonemesJson};
+  var GREAT_POSITIONS = ${greatPositionsJson};
+
+  var FLIP_MS = 500;
+  var CELL_STAGGER_MS = 60;
+  var LETTER_STAGGER_MS = 60;
+  var GRID_ROW_STAGGER_MS = 80;
+  var STAGGER_MS = 250;
+  var SOLVE_STAGGER_MS = 150;
+  var SOLVE_HOLD_MS = 1000;
+  var HINT_HOLD_MS = 2000;
+  var COMPLETION_CELL_STAGGER_MS = 15;
+  var COMPLETION_ROW_STAGGER_MS = 80;
+  var FINALE_WAIT_MS = 1000;
+  var TITLE_INITIAL_DELAY_MS = 1000;
+  var TITLE_SWIPE_STAGGER_MS = 100;
+  var TITLE_SWIPE_HOLD_MS = 500;
+  var TITLE_GAP_BETWEEN_WORDS_MS = 500;
+  var TITLE_REVEAL_STAGGER_MS = FLIP_MS / 2;
+  var TITLE_FLOURISH_STAGGER_MS = TITLE_REVEAL_STAGGER_MS / 2;
+  var TITLE_FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2;
+
+  var ALL_PHONEME_SYMBOLS = KEYPAD_TOP.concat(KEYPAD_BOTTOM).reduce(function (acc, row) { return acc.concat(row); }, []).filter(function (s) { return s; });
+
+  function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function randomPhoneme() { return ALL_PHONEME_SYMBOLS[randomInt(0, ALL_PHONEME_SYMBOLS.length - 1)]; }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+
+  // ---------- theme (always available, defaults to browser preference) ----------
+  function loadTheme() {
+    var dark = localStorage.getItem('wordsearch_export_dark');
+    var hc = localStorage.getItem('wordsearch_export_hc');
+    if (dark === null) dark = window.matchMedia('(prefers-color-scheme: dark)').matches ? '1' : '0';
+    if (hc === null) hc = '0';
+    return { dark: dark === '1', hc: hc === '1' };
+  }
+  function applyTheme(state) {
+    document.documentElement.classList.toggle('dark', state.dark);
+    document.documentElement.classList.toggle('high-contrast', state.hc);
+    localStorage.setItem('wordsearch_export_dark', state.dark ? '1' : '0');
+    localStorage.setItem('wordsearch_export_hc', state.hc ? '1' : '0');
+  }
+  var themeState = loadTheme();
+  applyTheme(themeState);
+  var darkToggle = document.getElementById('darkThemeToggle');
+  var hcToggle = document.getElementById('highContrastToggle');
+  darkToggle.checked = themeState.dark;
+  hcToggle.checked = themeState.hc;
+  darkToggle.addEventListener('change', function () { themeState.dark = darkToggle.checked; applyTheme(themeState); });
+  hcToggle.addEventListener('change', function () { themeState.hc = hcToggle.checked; applyTheme(themeState); });
+
+  // ---------- grid generation ----------
+  var DIRECTIONS = [{ dx: 1, dy: 0, o: 'h' }, { dx: 0, dy: 1, o: 'v' }, { dx: 1, dy: 1, o: 'd' }, { dx: -1, dy: 1, o: 'd' }];
+
+  function canPlace(cells, path, letters, orientation) {
+    for (var i = 0; i < path.length; i++) {
+      var pos = path[i]; var cell = cells[pos.row][pos.col];
+      if (cell.symbol === null) continue;
+      if (cell.symbol !== letters[i]) return false;
+      if (cell.orientations[orientation]) return false;
+    }
+    return true;
+  }
+  function tryPlaceWord(cells, entry, size) {
+    var length = entry.phonemes.length;
+    if (length > size) return null;
+    for (var attempt = 0; attempt < 300; attempt++) {
+      var dir = DIRECTIONS[randomInt(0, DIRECTIONS.length - 1)];
+      var backwards = Math.random() < 0.5;
+      var startCol = dir.dx === 1 ? randomInt(0, size - length) : dir.dx === -1 ? randomInt(length - 1, size - 1) : randomInt(0, size - 1);
+      var startRow = dir.dy === 1 ? randomInt(0, size - length) : randomInt(0, size - 1);
+      var path = [];
+      for (var i = 0; i < length; i++) path.push({ row: startRow + dir.dy * i, col: startCol + dir.dx * i });
+      var letters = backwards ? entry.phonemes.slice().reverse() : entry.phonemes;
+      if (canPlace(cells, path, letters, dir.o)) {
+        path.forEach(function (pos, i) { cells[pos.row][pos.col].symbol = letters[i]; cells[pos.row][pos.col].orientations[dir.o] = true; });
+        var cellsByPhonemeIndex = entry.phonemes.map(function (_, pi) {
+          var pathIndex = backwards ? (length - 1 - pi) : pi;
+          return path[pathIndex];
+        });
+        return cellsByPhonemeIndex;
+      }
+    }
+    return null;
+  }
+  function generateGrid(words, size) {
+    var cells = [];
+    for (var r = 0; r < size; r++) { var row = []; for (var c = 0; c < size; c++) row.push({ symbol: null, orientations: {} }); cells.push(row); }
+    var placedWords = {};
+    var ordered = words.slice().sort(function (a, b) { return b.phonemes.length - a.phonemes.length; });
+    ordered.forEach(function (entry) {
+      var result = tryPlaceWord(cells, entry, size);
+      if (result) placedWords[entry.word] = result;
+    });
+    for (var r2 = 0; r2 < size; r2++) for (var c2 = 0; c2 < size; c2++) if (cells[r2][c2].symbol === null) cells[r2][c2].symbol = randomPhoneme();
+    var grid = cells.map(function (row) { return row.map(function (cell) { return cell.symbol; }); });
+    return { grid: grid, placedWords: placedWords };
+  }
+
+  function cellsEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i].row !== b[i].row || a[i].col !== b[i].col) return false;
+    return true;
+  }
+  function matchDragToWord(dragPath, wordPhonemeCells, foundWordsObj) {
+    if (dragPath.length < 2) return null;
+    var reversed = dragPath.slice().reverse();
+    for (var word in wordPhonemeCells) {
+      if (foundWordsObj[word]) continue;
+      var cells = wordPhonemeCells[word];
+      if (cells.length !== dragPath.length) continue;
+      if (cellsEqual(cells, dragPath) || cellsEqual(cells, reversed)) return word;
+    }
+    return null;
+  }
+
+  // ---------- puzzle state ----------
+  var genResult = generateGrid(WORD_DATA, GRID_SIZE);
+  var grid = genResult.grid;
+  var wordPhonemeCells = genResult.placedWords;
+  var wordCellKeySet = {};
+  Object.keys(wordPhonemeCells).forEach(function (w) { wordPhonemeCells[w].forEach(function (c) { wordCellKeySet[c.row + ',' + c.col] = true; }); });
+  var WORD_DATA_BY_WORD = {};
+  WORD_DATA.forEach(function (e) { WORD_DATA_BY_WORD[e.word] = e; });
+
+  var foundWords = {};
+  var foundCellKeySet = {};
+  function recomputeFoundCellKeys() {
+    foundCellKeySet = {};
+    Object.keys(foundWords).forEach(function (w) { (wordPhonemeCells[w] || []).forEach(function (c) { foundCellKeySet[c.row + ',' + c.col] = true; }); });
+  }
+
+  var isPlayable = false;
+  var isPuzzleComplete = false;
+  var activeSolves = {};
+  var hoverKey = null;
+  var dragging = false, dragStart = null, dragPath = [];
+  var releaseHeld = {}, releaseFlipping = {};
+  var hintActive = null;
+  var completionFlipping = {};
+
+  var GREAT_POS = GREAT_POSITIONS[GRID_SIZE];
+  var specialCells = [];
+  if (GREAT_POS) for (var k = 0; k < 4; k++) specialCells.push({ row: GREAT_POS.row - 1, col: GREAT_POS.startCol - 1 + k });
+  var specialKeySet = {};
+  specialCells.forEach(function (c, i) { specialKeySet[c.row + ',' + c.col] = i; });
+
+  var introRevealedCell = [], introFlippingCell = [];
+  var finaleCellStage = [], finaleCellFlipping = [];
+  for (var r = 0; r < GRID_SIZE; r++) {
+    introRevealedCell.push([]); introFlippingCell.push([]);
+    finaleCellStage.push([]); finaleCellFlipping.push([]);
+    for (var c = 0; c < GRID_SIZE; c++) {
+      introRevealedCell[r].push(false); introFlippingCell[r].push(false);
+      finaleCellStage[r].push(0); finaleCellFlipping[r].push(false);
+    }
+  }
+  var showGreatBox = false, greatBoxRevealed = false, greatBoxFlipping = false;
+
+  var wordRowsState = WORD_DATA.map(function (entry) {
+    return {
+      word: entry.word, phonemes: entry.phonemes, isPlaced: !!wordPhonemeCells[entry.word],
+      englishRevealed: false, englishFlipping: false,
+      hintRevealed: false, hintFlipping: false,
+      letterRevealed: entry.phonemes.map(function () { return false; }),
+      letterFlipping: entry.phonemes.map(function () { return false; })
+    };
+  });
+
+  // ---------- DOM: grid ----------
+  var gridEl = document.getElementById('grid');
+  gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 40px)';
+  var cellEls = [];
+  for (var r3 = 0; r3 < GRID_SIZE; r3++) {
+    var rowArr = [];
+    for (var c3 = 0; c3 < GRID_SIZE; c3++) {
+      var el = document.createElement('div');
+      el.className = 'gcell empty';
+      el.style.width = '40px'; el.style.height = '40px';
+      (function (rr, cc) {
+        el.addEventListener('mousedown', function () { handleCellMouseDown(rr, cc); });
+        el.addEventListener('mouseenter', function () { handleCellMouseEnter(rr, cc); });
+      })(r3, c3);
+      gridEl.appendChild(el);
+      rowArr.push(el);
+    }
+    cellEls.push(rowArr);
+  }
+  document.getElementById('gridWrap').addEventListener('mouseleave', function () { if (!dragging) { hoverKey = null; } });
+
+  // ---------- DOM: word list ----------
+  var wordListCol = document.getElementById('wordListCol');
+  var wordRowEls = WORD_DATA.map(function (entry) {
+    var group = document.createElement('div');
+    group.className = 'word-group';
+    var row = document.createElement('div');
+    row.className = 'word-row';
+    var hintEl = document.createElement('div');
+    row.appendChild(hintEl);
+    var slotEls = entry.phonemes.map(function () {
+      var s = document.createElement('div');
+      row.appendChild(s);
+      return s;
+    });
+    group.appendChild(row);
+    var engEl = document.createElement('div');
+    group.appendChild(engEl);
+    wordListCol.appendChild(group);
+    return { hintEl: hintEl, slotEls: slotEls, engEl: engEl };
+  });
+
+  // ---------- render: grid cell ----------
+  function cellKey(r, c) { return r + ',' + c; }
+
+  function renderCell(r, c) {
+    var el = cellEls[r][c]; var key = cellKey(r, c);
+    var fStage = finaleCellStage[r][c];
+    var isSpecial = specialKeySet.hasOwnProperty(key);
+
+    if (fStage > 0) {
+      if (showGreatBox && isSpecial) { return; }
+      if (fStage === 1) {
+        if (isSpecial) {
+          el.className = 'gcell green' + (finaleCellFlipping[r][c] ? ' tile-flip' : '');
+          var sym = GREAT_PHONEMES[specialKeySet[key]] || '';
+          el.textContent = sym; el.title = sym ? ('/' + sym + '/') : '';
+        } else {
+          el.className = 'gcell finale-green-border' + (finaleCellFlipping[r][c] ? ' tile-flip' : '');
+          el.textContent = ''; el.title = '';
+        }
+      } else {
+        if (isSpecial) {
+          el.className = 'gcell finale-hidden' + (finaleCellFlipping[r][c] ? ' tile-flip' : '');
+        } else {
+          el.className = 'gcell finale-blue-border' + (finaleCellFlipping[r][c] ? ' tile-flip' : '');
+        }
+        el.textContent = ''; el.title = '';
+      }
+      return;
+    }
+
+    if (!introRevealedCell[r][c]) {
+      el.className = 'gcell empty' + (introFlippingCell[r][c] ? ' tile-flip' : '');
+      el.textContent = ''; el.title = '';
+      return;
+    }
+
+    var symbol = grid[r][c];
+    var isFound = !!foundCellKeySet[key];
+    var solveInfo = null;
+    for (var w in activeSolves) {
+      var cells = wordPhonemeCells[w]; if (!cells) continue;
+      for (var i = 0; i < cells.length; i++) {
+        if (cells[i].row === r && cells[i].col === c) { solveInfo = { revealed: activeSolves[w].letterRevealed[i], flipping: activeSolves[w].letterFlipping[i] }; break; }
+      }
+      if (solveInfo) break;
+    }
+
+    var colorClass = 'grey', flipping = false;
+    if (solveInfo) { colorClass = solveInfo.revealed ? 'green' : 'yellow'; flipping = solveInfo.flipping; }
+    else if (isFound) { colorClass = 'green'; }
+    else if (hintActive && hintActive.cellKey === key && hintActive.revealed) { colorClass = 'yellow'; flipping = hintActive.flipping; }
+
+    var isDragSelected = dragging && dragPath.some(function (p) { return p.row === r && p.col === c; });
+    var isHeld = !!releaseHeld[key];
+    var isRelFlipping = !!releaseFlipping[key];
+
+    if (isDragSelected) { colorClass = 'yellow'; flipping = false; }
+    else if (isHeld) { colorClass = 'yellow'; flipping = isRelFlipping; }
+    else if (isRelFlipping) { flipping = true; }
+
+    if (completionFlipping[key]) flipping = true;
+    if (hintActive && hintActive.cellKey === key && hintActive.flipping && !hintActive.revealed) flipping = true;
+
+    el.className = 'gcell ' + colorClass + (flipping ? ' tile-flip' : '');
+    el.textContent = symbol || '';
+    el.title = symbol ? ('/' + symbol + '/') : '';
+  }
+
+  function renderAllCells() {
+    for (var r = 0; r < GRID_SIZE; r++) for (var c = 0; c < GRID_SIZE; c++) renderCell(r, c);
+  }
+
+  function renderGreatBoxOverlay() {
+    if (!GREAT_POS) return;
+    var first = specialCells[0];
+    var existing = document.getElementById('greatBox');
+    if (!showGreatBox) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.id = 'greatBox';
+      existing.style.gridColumn = 'span 4';
+      existing.style.height = '40px';
+      var inner = document.createElement('div');
+      inner.className = 'great-box';
+      inner.style.height = '40px';
+      existing.appendChild(inner);
+      var refCell = cellEls[first.row][first.col];
+      refCell.parentNode.insertBefore(existing, refCell);
+      specialCells.forEach(function (sc) { cellEls[sc.row][sc.col].style.display = 'none'; });
+    }
+    var inner = existing.firstChild;
+    inner.className = 'great-box ' + (greatBoxRevealed ? 'revealed' : 'hidden') + (greatBoxFlipping ? ' tile-flip' : '');
+    inner.textContent = greatBoxRevealed ? 'Great!' : '';
+  }
+
+  // ---------- render: word list row ----------
+  function renderWordRow(idx) {
+    var st = wordRowsState[idx];
+    var rowEl = wordRowEls[idx];
+    var isFound = !!foundWords[st.word];
+    var solve = activeSolves[st.word];
+
+    if (!st.isPlaced) {
+      rowEl.hintEl.className = 'hint-box empty-border'; rowEl.hintEl.textContent = ''; rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
+    } else if (!st.hintRevealed && !st.hintFlipping) {
+      rowEl.hintEl.className = 'hidden-spacer'; rowEl.hintEl.textContent = ''; rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
+    } else if (isFound) {
+      rowEl.hintEl.className = 'hint-box tick'; rowEl.hintEl.textContent = '\\u2713'; rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
+    } else if (solve) {
+      rowEl.hintEl.className = 'hint-box ' + (solve.hintRevealed ? 'tick' : 'qmark') + (solve.hintFlipping ? ' tile-flip' : '');
+      rowEl.hintEl.textContent = solve.hintRevealed ? '\\u2713' : '?';
+      rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
+    } else {
+      var isThisHint = hintActive && hintActive.word === st.word;
+      rowEl.hintEl.className = 'hint-box qmark' + (isThisHint && hintActive.flipping ? ' tile-flip' : '');
+      rowEl.hintEl.textContent = '?';
+      rowEl.hintEl.title = 'Hint?';
+      rowEl.hintEl.onclick = function () { handleHintClick(WORD_DATA_BY_WORD[st.word]); };
+    }
+
+    for (var i = 0; i < st.phonemes.length; i++) {
+      var slotEl = rowEl.slotEls[i];
+      var symbol = st.phonemes[i];
+      var shown = st.letterRevealed[i] || st.letterFlipping[i];
+      if (!shown) { slotEl.className = 'hidden-spacer'; slotEl.textContent = ''; slotEl.title = ''; continue; }
+
+      var isHintThis = hintActive && hintActive.word === st.word && hintActive.phonemeIndex === i;
+      if (isFound) {
+        slotEl.className = 'ph-slot green'; slotEl.textContent = symbol; slotEl.title = '/' + symbol + '/';
+      } else if (solve) {
+        var revealed = solve.letterRevealed[i];
+        slotEl.className = 'ph-slot ' + (revealed ? 'green' : 'empty') + (solve.letterFlipping[i] ? ' tile-flip' : '');
+        slotEl.textContent = revealed ? symbol : '';
+        slotEl.title = revealed ? ('/' + symbol + '/') : '';
+      } else if (isHintThis) {
+        slotEl.className = 'ph-slot ' + (hintActive.revealed ? 'yellow' : 'empty') + (hintActive.flipping ? ' tile-flip' : '');
+        slotEl.textContent = hintActive.revealed ? symbol : '';
+        slotEl.title = hintActive.revealed ? ('/' + symbol + '/') : '';
+      } else {
+        slotEl.className = 'ph-slot empty'; slotEl.textContent = ''; slotEl.title = '';
+      }
+    }
+
+    if (!st.englishRevealed && !st.englishFlipping) {
+      rowEl.engEl.className = 'hidden-spacer-wide'; rowEl.engEl.textContent = '';
+    } else if (isFound || (solve && solve.wordBoxRevealed)) {
+      rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
+      rowEl.engEl.textContent = st.word;
+    } else {
+      rowEl.engEl.className = 'eng-box blue' + (st.englishFlipping ? ' tile-flip' : '');
+      rowEl.engEl.textContent = st.word;
+    }
+  }
+  function renderAllWordRows() { for (var i = 0; i < wordRowsState.length; i++) renderWordRow(i); }
+
+  // ---------- title demo ----------
+  var TCOLS = 9, TROWS = 3;
+  var TFIXED = [
+    { row: 2, col: 2, symbol: 'w' }, { row: 2, col: 3, symbol: '\\u025c\\u02d0' }, { row: 2, col: 4, symbol: 'd' },
+    { row: 1, col: 6, symbol: 's' }, { row: 2, col: 7, symbol: '\\u025c\\u02d0' }, { row: 3, col: 8, symbol: 't\\u0283' }
+  ];
+  function tFlatIndex(row, col) { return (row - 1) * TCOLS + (col - 1); }
+  var TWORD1 = [tFlatIndex(2, 2), tFlatIndex(2, 3), tFlatIndex(2, 4)];
+  var TWORD2 = [tFlatIndex(1, 6), tFlatIndex(2, 7), tFlatIndex(3, 8)];
+
+  var titleRow = document.getElementById('titleRow');
+  var titleFixedMap = {};
+  TFIXED.forEach(function (c) { titleFixedMap[c.row + ',' + c.col] = c.symbol; });
+  var titleSymbols = [];
+  for (var ti = 0; ti < TROWS * TCOLS; ti++) {
+    var trow = Math.floor(ti / TCOLS) + 1, tcol = (ti % TCOLS) + 1;
+    titleSymbols.push(titleFixedMap[trow + ',' + tcol] || randomPhoneme());
+  }
+  var titleTiles = [];
+  for (var ti2 = 0; ti2 < TROWS * TCOLS; ti2++) {
+    var tt = document.createElement('div');
+    tt.className = 'title-tile';
+    titleRow.appendChild(tt);
+    titleTiles.push(tt);
+  }
+  var titleWordBox = document.getElementById('titleWordBox');
+  var titleSearchBox = document.getElementById('titleSearchBox');
+
+  function setTitleCell(idx, className, flipping, text) {
+    var el = titleTiles[idx];
+    el.className = 'title-tile' + (className ? ' ' + className : '') + (flipping ? ' tile-flip' : '');
+    if (text !== undefined) el.textContent = text;
+  }
+  function setTitleBox(el, cls, flipping, text) {
+    el.className = 'title-word-box' + (cls ? ' ' + cls : '') + (flipping ? ' tile-flip' : '');
+    if (text !== undefined) el.textContent = text;
+  }
+
+  function runTitleSequence(onDone) {
+    var timers = [];
+    function t(fn, delay) { timers.push(setTimeout(fn, delay)); }
+    var time = TITLE_INITIAL_DELAY_MS;
+
+    for (var row = 1; row <= TROWS; row++) {
+      var rowIndices = []; for (var col = 1; col <= TCOLS; col++) rowIndices.push(tFlatIndex(row, col));
+      rowIndices.forEach(function (idx, i) {
+        var start = time + i * CELL_STAGGER_MS;
+        t((function (idx) { return function () { setTitleCell(idx, '', true); }; })(idx), start);
+        t((function (idx) { return function () { setTitleCell(idx, 'grey', false, titleSymbols[idx]); }; })(idx), start + FLIP_MS / 2);
+        t((function (idx) { return function () { setTitleCell(idx, 'grey', false); }; })(idx), start + FLIP_MS);
+      });
+      time += TITLE_REVEAL_STAGGER_MS;
+    }
+
+    t(function () { setTitleBox(titleWordBox, '', true); }, time);
+    t(function () { setTitleBox(titleWordBox, 'blue', false, 'word'); }, time + FLIP_MS / 2);
+    t(function () { setTitleBox(titleWordBox, 'blue', false); }, time + FLIP_MS);
+    time += TITLE_REVEAL_STAGGER_MS;
+
+    t(function () { setTitleBox(titleSearchBox, '', true); }, time);
+    t(function () { setTitleBox(titleSearchBox, 'blue', false, 'search'); }, time + FLIP_MS / 2);
+    t(function () { setTitleBox(titleSearchBox, 'blue', false); }, time + FLIP_MS);
+    time += TITLE_REVEAL_STAGGER_MS;
+
+    time += 1000;
+    TWORD1.forEach(function (idx, i) { t((function (idx) { return function () { setTitleCell(idx, 'yellow', false); }; })(idx), time + i * TITLE_SWIPE_STAGGER_MS); });
+    time += (TWORD1.length - 1) * TITLE_SWIPE_STAGGER_MS + TITLE_SWIPE_HOLD_MS;
+    TWORD1.forEach(function (idx, i) {
+      var start = time + i * SOLVE_STAGGER_MS;
+      t((function (idx) { return function () { setTitleCell(idx, 'yellow', true); }; })(idx), start);
+      t((function (idx) { return function () { setTitleCell(idx, 'green', true); }; })(idx), start + FLIP_MS / 2);
+      t((function (idx) { return function () { setTitleCell(idx, 'green', false); }; })(idx), start + FLIP_MS);
+    });
+    var word1End = time + (TWORD1.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
+    t(function () { setTitleBox(titleWordBox, 'blue', true); }, word1End);
+    t(function () { setTitleBox(titleWordBox, 'solved', true, 'word'); }, word1End + FLIP_MS / 2);
+    t(function () { setTitleBox(titleWordBox, 'solved', false); }, word1End + FLIP_MS);
+
+    time = word1End + FLIP_MS + TITLE_GAP_BETWEEN_WORDS_MS;
+    TWORD2.forEach(function (idx, i) { t((function (idx) { return function () { setTitleCell(idx, 'yellow', false); }; })(idx), time + i * TITLE_SWIPE_STAGGER_MS); });
+    time += (TWORD2.length - 1) * TITLE_SWIPE_STAGGER_MS + TITLE_SWIPE_HOLD_MS;
+    TWORD2.forEach(function (idx, i) {
+      var start = time + i * SOLVE_STAGGER_MS;
+      t((function (idx) { return function () { setTitleCell(idx, 'yellow', true); }; })(idx), start);
+      t((function (idx) { return function () { setTitleCell(idx, 'green', true); }; })(idx), start + FLIP_MS / 2);
+      t((function (idx) { return function () { setTitleCell(idx, 'green', false); }; })(idx), start + FLIP_MS);
+    });
+    var word2End = time + (TWORD2.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
+    t(function () { setTitleBox(titleSearchBox, 'blue', true); }, word2End);
+    t(function () { setTitleBox(titleSearchBox, 'solved', true, 'search'); }, word2End + FLIP_MS / 2);
+    t(function () { setTitleBox(titleSearchBox, 'solved', false); }, word2End + FLIP_MS);
+
+    time = word2End + FLIP_MS + TITLE_SWIPE_HOLD_MS;
+    for (var frow = 1; frow <= TROWS; frow++) {
+      var frowIndices = []; for (var fcol = 1; fcol <= TCOLS; fcol++) frowIndices.push(tFlatIndex(frow, fcol));
+      frowIndices.forEach(function (idx, i) {
+        var start = time + i * TITLE_FLOURISH_CELL_STAGGER_MS;
+        t((function (idx) { return function () { titleTiles[idx].classList.add('tile-flip'); }; })(idx), start);
+        t((function (idx) { return function () { titleTiles[idx].classList.remove('tile-flip'); }; })(idx), start + FLIP_MS);
+      });
+      time += TITLE_FLOURISH_STAGGER_MS;
+    }
+    t(function () { titleWordBox.classList.add('tile-flip'); }, time);
+    t(function () { titleWordBox.classList.remove('tile-flip'); }, time + FLIP_MS);
+    time += TITLE_FLOURISH_STAGGER_MS;
+    t(function () { titleSearchBox.classList.add('tile-flip'); }, time);
+    t(function () { titleSearchBox.classList.remove('tile-flip'); }, time + FLIP_MS);
+    time += FLIP_MS;
+
+    t(onDone, time);
+  }
+
+  // ---------- intro reveal sequence (grid + word list) ----------
+  function startIntroSequence() {
+    var timers = [];
+    function t(fn, delay) { timers.push(setTimeout(fn, delay)); }
+    var time = 1000;
+
+    // FIX: loop counters declared with "let" so each cell's deferred
+    // callbacks capture their OWN row/col — with "var" here, every
+    // callback would end up sharing the same final row/col value once
+    // the loop finished, which is why only the last cell was animating.
+    for (let row = 0; row < GRID_SIZE; row++) {
+      for (let col = 0; col < GRID_SIZE; col++) {
+        var start = time + col * CELL_STAGGER_MS;
+        t(function () { introFlippingCell[row][col] = true; renderCell(row, col); }, start);
+        t(function () { introRevealedCell[row][col] = true; renderCell(row, col); }, start + FLIP_MS / 2);
+        t(function () { introFlippingCell[row][col] = false; renderCell(row, col); }, start + FLIP_MS);
+      }
+      time += GRID_ROW_STAGGER_MS;
+    }
+    time += FLIP_MS;
+
+    WORD_DATA.forEach(function (entry, idx) {
+      var start = time + idx * STAGGER_MS;
+      t(function () { wordRowsState[idx].englishFlipping = true; renderWordRow(idx); }, start);
+      t(function () { wordRowsState[idx].englishRevealed = true; renderWordRow(idx); }, start + FLIP_MS / 2);
+      t(function () { wordRowsState[idx].englishFlipping = false; renderWordRow(idx); }, start + FLIP_MS);
+    });
+    var stage2End = WORD_DATA.length > 0 ? time + (WORD_DATA.length - 1) * STAGGER_MS + FLIP_MS : time;
+    time = stage2End;
+
+    var stage3MaxEnd = time;
+    WORD_DATA.forEach(function (entry, idx) {
+      var st = wordRowsState[idx];
+      var cursor = time + idx * STAGGER_MS;
+      if (st.isPlaced) {
+        var hs = cursor;
+        t(function () { st.hintFlipping = true; renderWordRow(idx); }, hs);
+        t(function () { st.hintRevealed = true; renderWordRow(idx); }, hs + FLIP_MS / 2);
+        t(function () { st.hintFlipping = false; renderWordRow(idx); }, hs + FLIP_MS);
+        cursor += FLIP_MS;
+      }
+      st.phonemes.forEach(function (_, li) {
+        var ls = cursor;
+        t(function () { st.letterFlipping[li] = true; renderWordRow(idx); }, ls);
+        t(function () { st.letterRevealed[li] = true; renderWordRow(idx); }, ls + FLIP_MS / 2);
+        t(function () { st.letterFlipping[li] = false; renderWordRow(idx); }, ls + FLIP_MS);
+        cursor += LETTER_STAGGER_MS;
+      });
+      cursor = cursor - LETTER_STAGGER_MS + FLIP_MS;
+      stage3MaxEnd = Math.max(stage3MaxEnd, cursor);
+    });
+
+    t(function () { isPlayable = true; }, stage3MaxEnd);
+  }
+
+  // ---------- interaction ----------
+  function computeStraightPath(start, end) {
+    var dRow = end.row - start.row, dCol = end.col - start.col;
+    if (dRow === 0 && dCol === 0) return [start];
+    var isH = dRow === 0, isV = dCol === 0, isD = Math.abs(dRow) === Math.abs(dCol);
+    if (!isH && !isV && !isD) return null;
+    var steps = Math.max(Math.abs(dRow), Math.abs(dCol));
+    var sr = Math.sign(dRow), sc = Math.sign(dCol);
+    var path = [];
+    for (var i = 0; i <= steps; i++) path.push({ row: start.row + sr * i, col: start.col + sc * i });
+    return path;
+  }
+
+  function handleCellMouseDown(r, c) {
+    if (!isPlayable) return;
+    dragging = true; dragStart = { row: r, col: c }; dragPath = [{ row: r, col: c }];
+    releaseHeld = {}; releaseFlipping = {}; hoverKey = null;
+    renderAllCells();
+  }
+  function handleCellMouseEnter(r, c) {
+    if (!isPlayable) return;
+    if (dragging && dragStart) {
+      var path = computeStraightPath(dragStart, { row: r, col: c });
+      if (path) { dragPath = path; renderAllCells(); }
+    } else {
+      hoverKey = cellKey(r, c);
+      renderAllCells();
+    }
+  }
+  window.addEventListener('mouseup', function () {
+    if (!dragging) return;
+    dragging = false;
+    var cells = dragPath; dragPath = []; dragStart = null;
+
+    var matched = matchDragToWord(cells, wordPhonemeCells, foundWords);
+    if (matched) { renderAllCells(); beginSolveSequence(matched); return; }
+
+    var keys = cells.map(function (c) { return cellKey(c.row, c.col); });
+    keys.forEach(function (k) { releaseHeld[k] = true; });
+    renderAllCells();
+    setTimeout(function () {
+      keys.forEach(function (k) { releaseFlipping[k] = true; });
+      renderAllCells();
+      setTimeout(function () {
+        keys.forEach(function (k) { delete releaseHeld[k]; });
+        renderAllCells();
+        setTimeout(function () {
+          keys.forEach(function (k) { delete releaseFlipping[k]; });
+          renderAllCells();
+        }, FLIP_MS / 2);
+      }, FLIP_MS / 2);
+    }, 1000);
+  });
+
+  // ---------- hint ----------
+  function handleHintClick(entry) {
+    if (!isPlayable) return;
+    if (foundWords[entry.word]) return;
+    if (activeSolves[entry.word]) return;
+    var cells = wordPhonemeCells[entry.word];
+    if (!cells) return;
+    var idx = Math.floor(Math.random() * entry.phonemes.length);
+    var cell = cells[idx];
+    hintActive = { word: entry.word, phonemeIndex: idx, cellKey: cellKey(cell.row, cell.col), revealed: false, flipping: false };
+
+    hintActive.flipping = true; renderAllCells(); renderAllWordRows();
+    setTimeout(function () { if (hintActive) { hintActive.revealed = true; renderAllCells(); renderAllWordRows(); } }, FLIP_MS / 2);
+    setTimeout(function () { if (hintActive) { hintActive.flipping = false; renderAllCells(); renderAllWordRows(); } }, FLIP_MS);
+    setTimeout(function () {
+      if (!hintActive) return;
+      hintActive.flipping = true; renderAllCells(); renderAllWordRows();
+      setTimeout(function () { if (hintActive) { hintActive.revealed = false; renderAllCells(); renderAllWordRows(); } }, FLIP_MS / 2);
+      setTimeout(function () { hintActive = null; renderAllCells(); renderAllWordRows(); }, FLIP_MS);
+    }, HINT_HOLD_MS);
+  }
+
+  // ---------- solve ----------
+  function beginSolveSequence(word) {
+    var cells = wordPhonemeCells[word];
+    if (!cells) return;
+    var length = cells.length;
+    var idx = WORD_DATA.findIndex(function (e) { return e.word === word; });
+
+    activeSolves[word] = {
+      hintFlipping: false, hintRevealed: false,
+      letterFlipping: Array(length).fill(false), letterRevealed: Array(length).fill(false),
+      wordBoxFlipping: false, wordBoxRevealed: false
+    };
+    renderAllCells(); renderAllWordRows();
+
+    var hintStart = SOLVE_HOLD_MS;
+    setTimeout(function () { activeSolves[word].hintFlipping = true; renderAllWordRows(); }, hintStart);
+    setTimeout(function () { activeSolves[word].hintRevealed = true; renderAllWordRows(); }, hintStart + FLIP_MS / 2);
+    setTimeout(function () { activeSolves[word].hintFlipping = false; renderAllWordRows(); }, hintStart + FLIP_MS);
+
+    var lettersStart = hintStart + FLIP_MS;
+    for (var i = 0; i < length; i++) {
+      (function (i) {
+        var start = lettersStart + i * SOLVE_STAGGER_MS;
+        setTimeout(function () { activeSolves[word].letterFlipping[i] = true; renderAllCells(); renderAllWordRows(); }, start);
+        setTimeout(function () { activeSolves[word].letterRevealed[i] = true; renderAllCells(); renderAllWordRows(); }, start + FLIP_MS / 2);
+        setTimeout(function () { activeSolves[word].letterFlipping[i] = false; renderAllCells(); renderAllWordRows(); }, start + FLIP_MS);
+      })(i);
+    }
+    var lettersEnd = lettersStart + (length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
+    setTimeout(function () { activeSolves[word].wordBoxFlipping = true; renderAllWordRows(); }, lettersEnd);
+    setTimeout(function () { activeSolves[word].wordBoxRevealed = true; renderAllWordRows(); }, lettersEnd + FLIP_MS / 2);
+    setTimeout(function () {
+      foundWords[word] = true; recomputeFoundCellKeys();
+      activeSolves[word].wordBoxFlipping = false;
+      delete activeSolves[word];
+      renderAllCells(); renderAllWordRows();
+
+      var allFound = Object.keys(wordPhonemeCells).every(function (w) { return foundWords[w]; });
+      if (allFound && !isPuzzleComplete) { isPuzzleComplete = true; runCompletionSequence(); }
+    }, lettersEnd + FLIP_MS);
+  }
+
+  // ---------- completion flourish + finale ----------
+  function runCompletionSequence() {
+    isPlayable = false;
+    var timers = [];
+    function t(fn, delay) { timers.push(setTimeout(fn, delay)); }
+
+    var flourishDuration = (GRID_SIZE - 1) * COMPLETION_ROW_STAGGER_MS + (GRID_SIZE - 1) * COMPLETION_CELL_STAGGER_MS + FLIP_MS;
+
+    // FIX: same "let" fix applied to all three finale loops below.
+    for (let row = 0; row < GRID_SIZE; row++) {
+      var rowStart = row * COMPLETION_ROW_STAGGER_MS;
+      for (let col = 0; col < GRID_SIZE; col++) {
+        var key = cellKey(row, col);
+        var start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
+        t(function () { completionFlipping[key] = true; renderCell(row, col); }, start);
+        t(function () { delete completionFlipping[key]; renderCell(row, col); }, start + FLIP_MS);
+      }
+    }
+
+    var time = flourishDuration + FINALE_WAIT_MS;
+
+    for (let row2 = 0; row2 < GRID_SIZE; row2++) {
+      var rowStart2 = time + row2 * COMPLETION_ROW_STAGGER_MS;
+      for (let col2 = 0; col2 < GRID_SIZE; col2++) {
+        var start2 = rowStart2 + col2 * COMPLETION_CELL_STAGGER_MS;
+        t(function () { finaleCellFlipping[row2][col2] = true; renderCell(row2, col2); }, start2);
+        t(function () { finaleCellStage[row2][col2] = 1; renderCell(row2, col2); }, start2 + FLIP_MS / 2);
+        t(function () { finaleCellFlipping[row2][col2] = false; renderCell(row2, col2); }, start2 + FLIP_MS);
+      }
+    }
+    time += flourishDuration + FINALE_WAIT_MS;
+
+    for (let row3 = 0; row3 < GRID_SIZE; row3++) {
+      var rowStart3 = time + row3 * COMPLETION_ROW_STAGGER_MS;
+      for (let col3 = 0; col3 < GRID_SIZE; col3++) {
+        var start3 = rowStart3 + col3 * COMPLETION_CELL_STAGGER_MS;
+        t(function () { finaleCellFlipping[row3][col3] = true; renderCell(row3, col3); }, start3);
+        t(function () { finaleCellStage[row3][col3] = 2; renderCell(row3, col3); }, start3 + FLIP_MS / 2);
+        t(function () { finaleCellFlipping[row3][col3] = false; renderCell(row3, col3); }, start3 + FLIP_MS);
+      }
+    }
+    var stage2End = time + flourishDuration;
+
+    t(function () { showGreatBox = true; greatBoxFlipping = true; renderGreatBoxOverlay(); }, stage2End);
+    t(function () { greatBoxRevealed = true; renderGreatBoxOverlay(); }, stage2End + FLIP_MS / 2);
+    t(function () { greatBoxFlipping = false; renderGreatBoxOverlay(); }, stage2End + FLIP_MS);
+  }
+
+  // ---------- boot ----------
+  renderAllCells();
+  renderAllWordRows();
+  runTitleSequence(function () { startIntroSequence(); });
+})();
+</script>
+</body>
+</html>`;
+}

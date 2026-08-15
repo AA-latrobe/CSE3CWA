@@ -11,6 +11,7 @@ import { WORD_LIST, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getWordCountForGridSize } from '@/lib/wordSearchData';
 import { getInitialWordSearchState, saveWordSearchState } from '@/lib/wordSearchStorage';
 import { generateWordSearchGrid, PlacedWord } from '@/lib/wordSearchGenerator';
+import { downloadStandaloneWordSearchHtml } from '@/lib/wordSearchExport';
 
 const SEARCH_STORAGE_KEY = 'wordsearch_search_phonemes';
 
@@ -446,6 +447,11 @@ export default function WordSearchBuilder() {
     setTitleSignal((n) => n + 1);
   };
 
+  const handleGenerateWordSearchPage = () => {
+    if (!placedGrid) return;
+    downloadStandaloneWordSearchHtml(selectedWords, gridSize);
+  };
+
   useEffect(() => {
     setTitleSignal((n) => n + 1);
   }, []);
@@ -532,7 +538,9 @@ export default function WordSearchBuilder() {
               <div className="mt-4 flex justify-center">
                 <button
                   type="button"
-                  className="rounded-md bg-word-reveal px-4 py-2 text-sm font-medium text-word-reveal-foreground hover:opacity-80"
+                  onClick={handleGenerateWordSearchPage}
+                  disabled={!placedGrid}
+                  className="rounded-md bg-word-reveal px-4 py-2 text-sm font-medium text-word-reveal-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Generate .html Puzzle Page
                 </button>

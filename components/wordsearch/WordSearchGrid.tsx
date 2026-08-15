@@ -9,6 +9,7 @@ import WordSearchWordListPreview from './WordSearchWordListPreview';
 import type { SolveState } from './WordSearchBuilder';
 import { PhonemeWordEntry, WORD_LIST, getPhonemeHoverText } from '@/lib/phonemeData';
 import { getWordCountForGridSize, GREAT_WORD_POSITIONS } from '@/lib/wordSearchData';
+import { computeConnectorSegments, computeSegmentsForCellSequence, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP } from '@/lib/wordSearchConnectors';
 
 const MAX_CELL_SIZE = 40;
 const MIN_CELL_SIZE = 24;
@@ -19,7 +20,7 @@ const COMPLETION_CELL_STAGGER_MS = 15;
 const COMPLETION_ROW_STAGGER_MS = 80;
 const COMPLETION_FLIP_MS = 500;
 const FINALE_WAIT_MS = 1000;
-const START_NEW_PUZZLE_HOLD_MS = 1000; // extra pause after completion finale before the button re-enables
+const START_NEW_PUZZLE_HOLD_MS = 1000;
 
 type HintState = { word: string; phonemeIndex: number; nonce: number } | null;
 type Cell = { row: number; col: number };
@@ -173,8 +174,6 @@ function GridCellView({
     baseColorClass = solveInfo.revealed ? 'bg-match text-match-foreground' : 'bg-partial text-partial-foreground';
     baseFlipping = solveInfo.flipping;
   } else {
-    // The cell's color when no hint is active — found (possibly via a
-    // DIFFERENT, already-solved word crossing this cell) or plain filler.
     const trueColorClass =
       isFoundCell
         ? 'bg-match text-match-foreground'
@@ -182,11 +181,6 @@ function GridCellView({
         ? 'bg-key-used text-key-used-foreground'
         : 'bg-key text-key-foreground';
 
-    // Hint now overlays ON TOP of the true color rather than being
-    // shadowed by isFoundCell — so hinting a letter that happens to
-    // already be green (because it crosses an already-found word) still
-    // flips yellow-and-back, correctly reverting to green afterward
-    // instead of never animating at all.
     baseFlipping = hintFlipping;
     baseColorClass = hintRevealed ? 'bg-partial text-partial-foreground' : trueColorClass;
   }
@@ -300,6 +294,8 @@ export default function WordSearchGrid({
     return { specialCells: cells, specialKeySet: keySet, greatPhonemes: phonemes };
   }, [gridSize]);
 
+  const gridPixelSize = gridSize * cellSize + (gridSize - 1) * MIN_GAP;
+
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPath, setDragPath] = useState<Cell[]>([]);
@@ -311,11 +307,22 @@ export default function WordSearchGrid({
 
   const [completionFlipping, setCompletionFlipping] = useState<Set<string>>(new Set());
   const [finaleCellState, setFinaleCellState] = useState<FinaleCellState[][]>([]);
+  const [finalePhase, setFinalePhase] = useState<0 | 1 | 2>(0);
   const [showEnglishBox, setShowEnglishBox] = useState(false);
   const [englishBoxFlipping, setEnglishBoxFlipping] = useState(false);
   const [englishBoxRevealed, setEnglishBoxRevealed] = useState(false);
   const [startNewPuzzleReady, setStartNewPuzzleReady] = useState(false);
   const completionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const wordConnectorSegments = useMemo(() => {
+    if (finalePhase !== 0) return [];
+    return computeConnectorSegments(wordPhonemeCells, foundWords, solves, cellSize, MIN_GAP);
+  }, [wordPhonemeCells, foundWords, solves, cellSize, finalePhase]);
+
+  const greatConnectorSegments = useMemo(() => {
+    if (finalePhase !== 1) return [];
+    return computeSegmentsForCellSequence(specialCells, cellSize, MIN_GAP, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, 'great');
+  }, [finalePhase, specialCells, cellSize]);
 
   useEffect(() => {
     if (completionFlipSignal === 0) return;
@@ -323,6 +330,7 @@ export default function WordSearchGrid({
     completionTimersRef.current.forEach(clearTimeout);
     completionTimersRef.current = [];
 
+    setFinalePhase(0);
     setCompletionFlipping(new Set());
     setFinaleCellState(
       Array.from({ length: gridSize }, () =>
@@ -360,6 +368,7 @@ export default function WordSearchGrid({
     }
 
     let time = flourishDuration + FINALE_WAIT_MS;
+    t(() => setFinalePhase(1), time);
 
     for (let row = 0; row < gridSize; row++) {
       const rowStart = time + row * COMPLETION_ROW_STAGGER_MS;
@@ -398,6 +407,7 @@ export default function WordSearchGrid({
     }
 
     time += flourishDuration + FINALE_WAIT_MS;
+    t(() => setFinalePhase(2), time);
 
     for (let row = 0; row < gridSize; row++) {
       const rowStart = time + row * COMPLETION_ROW_STAGGER_MS;
@@ -442,8 +452,6 @@ export default function WordSearchGrid({
     t(() => setEnglishBoxRevealed(true), stage2End + COMPLETION_FLIP_MS / 2);
     t(() => setEnglishBoxFlipping(false), stage2End + COMPLETION_FLIP_MS);
 
-    // Start New Puzzle re-enables (and turns blue) this long after the
-    // Great! box has fully finished revealing.
     t(() => setStartNewPuzzleReady(true), stage2End + COMPLETION_FLIP_MS + START_NEW_PUZZLE_HOLD_MS);
 
     return () => completionTimersRef.current.forEach(clearTimeout);
@@ -485,13 +493,9 @@ export default function WordSearchGrid({
     setHoverKey(null);
     dragStartRef.current = null;
 
-    // A fresh puzzle (including "Start New Puzzle" replaying the same
-    // config) needs to also clear any leftover completion/finale visuals
-    // from a previous game — otherwise a just-won grid's "Great!" overlay
-    // and finale colors linger through the title/intro replay instead of
-    // resetting to a blank, unrevealed grid.
     completionTimersRef.current.forEach(clearTimeout);
     completionTimersRef.current = [];
+    setFinalePhase(0);
     setCompletionFlipping(new Set());
     setFinaleCellState([]);
     setShowEnglishBox(false);
@@ -549,107 +553,127 @@ export default function WordSearchGrid({
           if (!isDragging) setHoverKey(null);
         }}
       >
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
-            gap: MIN_GAP,
-          }}
-        >
-          {Array.from({ length: gridSize * gridSize }).map((_, i) => {
-            const row = Math.floor(i / gridSize);
-            const col = i % gridSize;
-            const key = `${row},${col}`;
+        <div style={{ position: 'relative', width: gridPixelSize, height: gridPixelSize }}>
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
+              gap: MIN_GAP,
+            }}
+          >
+            {Array.from({ length: gridSize * gridSize }).map((_, i) => {
+              const row = Math.floor(i / gridSize);
+              const col = i % gridSize;
+              const key = `${row},${col}`;
 
-            const gridIsValidSize =
-              placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
+              const gridIsValidSize =
+                placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
 
-            if (!gridIsValidSize) {
-              return (
-                <div key={i} style={{ perspective: '400px' }}>
-                  <div
-                    className="flex items-center justify-center rounded-md border-2 border-foreground/20 bg-background"
-                    style={{ width: cellSize, height: cellSize }}
-                  />
-                </div>
-              );
-            }
-
-            const specialIndex = specialCells.findIndex((c) => c.row === row && c.col === col);
-            const isSpecialCell = specialIndex !== -1;
-
-            if (showEnglishBox && isSpecialCell) {
-              if (specialIndex === 0) {
+              if (!gridIsValidSize) {
                 return (
-                  <div key={i} style={{ gridColumn: 'span 4', perspective: '400px' }}>
+                  <div key={i} style={{ perspective: '400px' }}>
                     <div
-                      className={`flex items-center justify-center rounded-md font-semibold ${
-                        englishBoxRevealed
-                          ? 'bg-word-reveal text-word-reveal-foreground'
-                          : 'border-2 border-transparent bg-transparent'
-                      } ${englishBoxFlipping ? 'animate-tile-flip' : ''}`}
-                      style={{ height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
-                    >
-                      {englishBoxRevealed ? 'Great!' : ''}
-                    </div>
+                      className="flex items-center justify-center rounded-md border-2 border-foreground/20 bg-background"
+                      style={{ width: cellSize, height: cellSize }}
+                    />
                   </div>
                 );
               }
-              return null;
-            }
 
-            const cellFinale = finaleCellState[row]?.[col];
-            const finaleStage = cellFinale?.stage ?? 0;
-            const finaleFlipping = cellFinale?.flipping ?? false;
-            const specialSymbol = isSpecialCell ? greatPhonemes[specialIndex] : undefined;
+              const specialIndex = specialCells.findIndex((c) => c.row === row && c.col === col);
+              const isSpecialCell = specialIndex !== -1;
 
-            const cellFlipInfo = gridCellFlip[row]?.[col];
-            const introRevealed = Boolean(cellFlipInfo?.revealed);
-            const introFlipping = Boolean(cellFlipInfo?.flipping);
-
-            const symbol = placedGrid![row][col];
-            const isWordCell = wordCellKeys.has(key);
-            const isFoundCell = foundCellKeys.has(key);
-            const hintTriggerId = hintCell && hintCell.row === row && hintCell.col === col ? hintCell.token : null;
-
-            const solveEntry = solveCellMap.get(key);
-            const solveInfo: SolveCellInfo = solveEntry
-              ? {
-                  flipping: solveEntry.solve.letterFlipping[solveEntry.index],
-                  revealed: solveEntry.solve.letterRevealed[solveEntry.index],
+              if (showEnglishBox && isSpecialCell) {
+                if (specialIndex === 0) {
+                  return (
+                    <div key={i} style={{ gridColumn: 'span 4', perspective: '400px' }}>
+                      <div
+                        className={`flex items-center justify-center rounded-md font-semibold ${
+                          englishBoxRevealed
+                            ? 'bg-word-reveal text-word-reveal-foreground'
+                            : 'border-2 border-transparent bg-transparent'
+                        } ${englishBoxFlipping ? 'animate-tile-flip' : ''}`}
+                        style={{ height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+                      >
+                        {englishBoxRevealed ? 'Great!' : ''}
+                      </div>
+                    </div>
+                  );
                 }
-              : null;
+                return null;
+              }
 
-            const liveSelected = isDragging
-              ? dragPath.some((c) => c.row === row && c.col === col)
-              : hoverKey === key;
-            const releaseToken = releaseInfo && releaseInfo.cells.has(key) ? releaseInfo.token : null;
-            const isCompletionFlipping = completionFlipping.has(key);
+              const cellFinale = finaleCellState[row]?.[col];
+              const finaleStage = cellFinale?.stage ?? 0;
+              const finaleFlipping = cellFinale?.flipping ?? false;
+              const specialSymbol = isSpecialCell ? greatPhonemes[specialIndex] : undefined;
 
-            return (
-              <GridCellView
-                key={i}
-                symbol={symbol}
-                isWordCell={isWordCell}
-                revealWords={revealWords}
-                hintTriggerId={hintTriggerId}
-                liveSelected={liveSelected}
-                releaseToken={releaseToken}
-                isFoundCell={isFoundCell}
-                solveInfo={solveInfo}
-                cellSize={cellSize}
-                introRevealed={introRevealed}
-                introFlipping={introFlipping}
-                completionFlipping={isCompletionFlipping}
-                finaleStage={finaleStage}
-                finaleFlipping={finaleFlipping}
-                isSpecialCell={isSpecialCell}
-                specialSymbol={specialSymbol}
-                onMouseDown={() => handleCellMouseDown(row, col)}
-                onMouseEnter={() => handleCellMouseEnter(row, col)}
+              const cellFlipInfo = gridCellFlip[row]?.[col];
+              const introRevealed = Boolean(cellFlipInfo?.revealed);
+              const introFlipping = Boolean(cellFlipInfo?.flipping);
+
+              const symbol = placedGrid![row][col];
+              const isWordCell = wordCellKeys.has(key);
+              const isFoundCell = foundCellKeys.has(key);
+              const hintTriggerId = hintCell && hintCell.row === row && hintCell.col === col ? hintCell.token : null;
+
+              const solveEntry = solveCellMap.get(key);
+              const solveInfo: SolveCellInfo = solveEntry
+                ? {
+                    flipping: solveEntry.solve.letterFlipping[solveEntry.index],
+                    revealed: solveEntry.solve.letterRevealed[solveEntry.index],
+                  }
+                : null;
+
+              const liveSelected = isDragging
+                ? dragPath.some((c) => c.row === row && c.col === col)
+                : hoverKey === key;
+              const releaseToken = releaseInfo && releaseInfo.cells.has(key) ? releaseInfo.token : null;
+              const isCompletionFlipping = completionFlipping.has(key);
+
+              return (
+                <GridCellView
+                  key={i}
+                  symbol={symbol}
+                  isWordCell={isWordCell}
+                  revealWords={revealWords}
+                  hintTriggerId={hintTriggerId}
+                  liveSelected={liveSelected}
+                  releaseToken={releaseToken}
+                  isFoundCell={isFoundCell}
+                  solveInfo={solveInfo}
+                  cellSize={cellSize}
+                  introRevealed={introRevealed}
+                  introFlipping={introFlipping}
+                  completionFlipping={isCompletionFlipping}
+                  finaleStage={finaleStage}
+                  finaleFlipping={finaleFlipping}
+                  isSpecialCell={isSpecialCell}
+                  specialSymbol={specialSymbol}
+                  onMouseDown={() => handleCellMouseDown(row, col)}
+                  onMouseEnter={() => handleCellMouseEnter(row, col)}
+                />
+              );
+            })}
+          </div>
+
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            {[...wordConnectorSegments, ...greatConnectorSegments].map((seg) => (
+              <div
+                key={seg.key}
+                className="bg-match"
+                style={{
+                  position: 'absolute',
+                  left: seg.left,
+                  top: seg.top,
+                  width: seg.width,
+                  height: seg.height,
+                  borderRadius: 1,
+                  transform: seg.rotationDeg ? `rotate(${seg.rotationDeg}deg)` : undefined,
+                }}
               />
-            );
-          })}
+            ))}
+          </div>
         </div>
       </div>
 

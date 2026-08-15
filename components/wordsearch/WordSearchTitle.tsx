@@ -255,8 +255,8 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
   function boxClass(state: BoxState) {
     if (!state.revealed) return 'border border-foreground/20 bg-background';
     if (state.color === 'blue') return 'bg-word-reveal text-word-reveal-foreground';
-    return 'bg-key text-key-foreground line-through';
-    }
+    return 'border border-foreground/20 bg-background text-foreground line-through';
+  }
 
   return (
     <div>

@@ -130,7 +130,7 @@ function PhonemeSlot({
     showSymbol = true;
     titleAttr = getPhonemeHoverText(symbol);
   } else if (solveInfo) {
-    const preColor = revealWords ? 'bg-key-used text-key-used-foreground' : 'bg-key text-key-foreground';
+    const preColor = revealWords ? 'bg-key-used text-key-used-foreground' : 'border border-foreground/20 bg-background';
     colorClass = solveInfo.revealed ? 'bg-match text-match-foreground' : preColor;
     isFlipping = solveInfo.flipping;
     showSymbol = solveInfo.revealed || revealWords;
@@ -140,11 +140,9 @@ function PhonemeSlot({
       ? 'bg-partial text-partial-foreground'
       : revealWords
       ? 'bg-key-used text-key-used-foreground'
-      : 'bg-key text-key-foreground';
+      : 'border border-foreground/20 bg-background';
     isFlipping = hintFlipping || introFlipping;
     showSymbol = hintRevealed || revealWords;
-    // Hover text now works as soon as the symbol is actually visible in
-    // its revealed grey/dark-grey state — not just for found/solving cells.
     titleAttr = showSymbol ? getPhonemeHoverText(symbol) : undefined;
   }
 
@@ -285,7 +283,7 @@ export default function WordSearchWordListPreview({
                   <div
                     className={`flex items-center justify-center rounded-md ${
                       isFound || solveForWord?.wordBoxRevealed
-                        ? 'bg-key px-2 font-semibold text-key-foreground line-through'
+                        ? 'border border-foreground/20 bg-background px-2 font-semibold text-foreground line-through'
                         : 'bg-word-reveal px-2 font-semibold text-word-reveal-foreground'
                     } ${
                       solveForWord?.wordBoxFlipping || englishFlippingNow ? 'animate-tile-flip' : ''

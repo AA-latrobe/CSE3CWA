@@ -60,7 +60,7 @@ export default function WordSearchBuilder() {
   const [scrollY, setScrollY] = useState(initial.scrollY);
   const [placedGrid, setPlacedGrid] = useState<(string | null)[][] | null>(null);
   const [placedWords, setPlacedWords] = useState<PlacedWord[]>([]);
-  const [revealWords, setRevealWords] = useState(true);
+  const [revealWords, setRevealWords] = useState(false);
   const [hint, setHint] = useState<HintState | null>(null);
   const [foundWords, setFoundWords] = useState<Set<string>>(new Set());
   const [solves, setSolves] = useState<SolveState[]>([]);

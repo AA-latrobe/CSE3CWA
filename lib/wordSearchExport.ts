@@ -1,5 +1,5 @@
 import { PhonemeWordEntry, KEYPAD_TOP, KEYPAD_BOTTOM, WORD_LIST } from './phonemeData';
-import { GREAT_WORD_POSITIONS } from './wordSearchData';
+import { GREAT_WORD_POSITIONS, GRID_SIZE_WORD_COUNTS } from './wordSearchData';
 
 function formatTimestamp(): string {
   const d = new Date();
@@ -24,11 +24,14 @@ export function downloadStandaloneWordSearchHtml(words: PhonemeWordEntry[], grid
 
 function generateStandaloneWordSearchHtml(words: PhonemeWordEntry[], gridSize: number): string {
   const wordDataJson = JSON.stringify(words);
+  const masterWordListJson = JSON.stringify(WORD_LIST);
   const keypadTopJson = JSON.stringify(KEYPAD_TOP);
   const keypadBottomJson = JSON.stringify(KEYPAD_BOTTOM);
   const greatEntry = WORD_LIST.find((w) => w.word === 'great');
   const greatPhonemesJson = JSON.stringify(greatEntry ? greatEntry.phonemes : []);
   const greatPositionsJson = JSON.stringify(GREAT_WORD_POSITIONS);
+  const wordCountsJson = JSON.stringify(GRID_SIZE_WORD_COUNTS);
+  const gridSizeOptionsJson = JSON.stringify(Object.keys(GRID_SIZE_WORD_COUNTS).map(Number));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -130,7 +133,7 @@ body {
 .eng-box.blue { background: var(--word-reveal); color: var(--word-reveal-foreground); }
 .eng-box.solved { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground); text-decoration: line-through; }
 
-.grid-col { flex:1; min-width:0; }
+.grid-col { flex:1; min-width:0; border-left:1px solid rgba(128,128,128,0.1); padding-left:24px; }
 .gcell {
   border-radius:0.375rem; display:flex; align-items:center; justify-content:center; font-weight:500;
   cursor:pointer; user-select:none; perspective:400px; font-size:1rem;
@@ -147,6 +150,14 @@ body {
 }
 .great-box.hidden { border:2px solid transparent; background: transparent; }
 .great-box.revealed { background: var(--word-reveal); color: var(--word-reveal-foreground); }
+
+.start-new-wrap { margin-top:24px; display:flex; justify-content:center; }
+.start-new-btn {
+  border-radius:0.375rem; padding:6px 12px; font-size:0.875rem; font-weight:500; cursor:pointer; border:none;
+  background: var(--match); color: var(--match-foreground);
+}
+.start-new-btn:disabled { opacity:0.4; cursor:not-allowed; }
+.start-new-btn.blue { background: var(--word-reveal); color: var(--word-reveal-foreground); }
 
 .toggles-row { margin-top:24px; display:flex; align-items:center; justify-content:center; gap:32px; }
 .control-box { border:1px solid rgba(128,128,128,0.15); border-radius:0.375rem; padding:8px 12px; display:flex; align-items:center; gap:12px; }
@@ -183,6 +194,9 @@ input:checked + .slider:before { transform: translateX(20px); }
       <div id="gridWrap" style="display:flex; justify-content:center;">
         <div id="grid" style="display:grid; gap:4px;"></div>
       </div>
+      <div class="start-new-wrap">
+        <button class="start-new-btn" id="startNewBtn" disabled>Start New Puzzle</button>
+      </div>
       <div class="toggles-row">
         <div class="control-box">
           <span>Dark Theme</span>
@@ -199,8 +213,11 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 <script>
 (function () {
-  var WORD_DATA = ${wordDataJson};
-  var GRID_SIZE = ${gridSize};
+  var INITIAL_WORD_DATA = ${wordDataJson};
+  var INITIAL_GRID_SIZE = ${gridSize};
+  var MASTER_WORD_LIST = ${masterWordListJson};
+  var GRID_SIZE_WORD_COUNTS = ${wordCountsJson};
+  var GRID_SIZE_OPTIONS = ${gridSizeOptionsJson};
   var KEYPAD_TOP = ${keypadTopJson};
   var KEYPAD_BOTTOM = ${keypadBottomJson};
   var GREAT_PHONEMES = ${greatPhonemesJson};
@@ -217,6 +234,7 @@ input:checked + .slider:before { transform: translateX(20px); }
   var COMPLETION_CELL_STAGGER_MS = 15;
   var COMPLETION_ROW_STAGGER_MS = 80;
   var FINALE_WAIT_MS = 1000;
+  var START_NEW_PUZZLE_HOLD_MS = 1000;
   var TITLE_INITIAL_DELAY_MS = 1000;
   var TITLE_SWIPE_STAGGER_MS = 100;
   var TITLE_SWIPE_HOLD_MS = 500;
@@ -323,104 +341,128 @@ input:checked + .slider:before { transform: translateX(20px); }
     return null;
   }
 
-  // ---------- puzzle state ----------
-  var genResult = generateGrid(WORD_DATA, GRID_SIZE);
-  var grid = genResult.grid;
-  var wordPhonemeCells = genResult.placedWords;
-  var wordCellKeySet = {};
-  Object.keys(wordPhonemeCells).forEach(function (w) { wordPhonemeCells[w].forEach(function (c) { wordCellKeySet[c.row + ',' + c.col] = true; }); });
-  var WORD_DATA_BY_WORD = {};
-  WORD_DATA.forEach(function (e) { WORD_DATA_BY_WORD[e.word] = e; });
-
-  var foundWords = {};
-  var foundCellKeySet = {};
-  function recomputeFoundCellKeys() {
-    foundCellKeySet = {};
-    Object.keys(foundWords).forEach(function (w) { (wordPhonemeCells[w] || []).forEach(function (c) { foundCellKeySet[c.row + ',' + c.col] = true; }); });
+  function generateRandomGameConfig() {
+    var size = GRID_SIZE_OPTIONS[randomInt(0, GRID_SIZE_OPTIONS.length - 1)];
+    var count = GRID_SIZE_WORD_COUNTS[size];
+    var shuffled = shuffle(MASTER_WORD_LIST);
+    return { size: size, words: shuffled.slice(0, count) };
   }
 
-  var isPlayable = false;
-  var isPuzzleComplete = false;
-  var activeSolves = {};
-  var hoverKey = null;
-  var dragging = false, dragStart = null, dragPath = [];
-  var releaseHeld = {}, releaseFlipping = {};
-  var hintActive = null;
-  var completionFlipping = {};
+  // ---------- mutable per-game state (reassigned by setupPuzzle) ----------
+  var WORD_DATA, GRID_SIZE, grid, wordPhonemeCells, wordCellKeySet, WORD_DATA_BY_WORD;
+  var foundWords, foundCellKeySet, isPlayable, isPuzzleComplete, activeSolves;
+  var hoverKey, dragging, dragStart, dragPath, releaseHeld, releaseFlipping, hintActive, completionFlipping;
+  var GREAT_POS, specialCells, specialKeySet;
+  var introRevealedCell, introFlippingCell, finaleCellStage, finaleCellFlipping;
+  var showGreatBox, greatBoxRevealed, greatBoxFlipping;
+  var wordRowsState, startNewPuzzleReady;
+  var cellEls, wordRowEls;
 
-  var GREAT_POS = GREAT_POSITIONS[GRID_SIZE];
-  var specialCells = [];
-  if (GREAT_POS) for (var k = 0; k < 4; k++) specialCells.push({ row: GREAT_POS.row - 1, col: GREAT_POS.startCol - 1 + k });
-  var specialKeySet = {};
-  specialCells.forEach(function (c, i) { specialKeySet[c.row + ',' + c.col] = i; });
-
-  var introRevealedCell = [], introFlippingCell = [];
-  var finaleCellStage = [], finaleCellFlipping = [];
-  for (var r = 0; r < GRID_SIZE; r++) {
-    introRevealedCell.push([]); introFlippingCell.push([]);
-    finaleCellStage.push([]); finaleCellFlipping.push([]);
-    for (var c = 0; c < GRID_SIZE; c++) {
-      introRevealedCell[r].push(false); introFlippingCell[r].push(false);
-      finaleCellStage[r].push(0); finaleCellFlipping[r].push(false);
-    }
-  }
-  var showGreatBox = false, greatBoxRevealed = false, greatBoxFlipping = false;
-
-  var wordRowsState = WORD_DATA.map(function (entry) {
-    return {
-      word: entry.word, phonemes: entry.phonemes, isPlaced: !!wordPhonemeCells[entry.word],
-      englishRevealed: false, englishFlipping: false,
-      hintRevealed: false, hintFlipping: false,
-      letterRevealed: entry.phonemes.map(function () { return false; }),
-      letterFlipping: entry.phonemes.map(function () { return false; })
-    };
-  });
-
-  // ---------- DOM: grid ----------
   var gridEl = document.getElementById('grid');
-  gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 40px)';
-  var cellEls = [];
-  for (var r3 = 0; r3 < GRID_SIZE; r3++) {
-    var rowArr = [];
-    for (var c3 = 0; c3 < GRID_SIZE; c3++) {
-      var el = document.createElement('div');
-      el.className = 'gcell empty';
-      el.style.width = '40px'; el.style.height = '40px';
-      (function (rr, cc) {
-        el.addEventListener('mousedown', function () { handleCellMouseDown(rr, cc); });
-        el.addEventListener('mouseenter', function () { handleCellMouseEnter(rr, cc); });
-      })(r3, c3);
-      gridEl.appendChild(el);
-      rowArr.push(el);
-    }
-    cellEls.push(rowArr);
-  }
-  document.getElementById('gridWrap').addEventListener('mouseleave', function () { if (!dragging) { hoverKey = null; } });
-
-  // ---------- DOM: word list ----------
   var wordListCol = document.getElementById('wordListCol');
-  var wordRowEls = WORD_DATA.map(function (entry) {
-    var group = document.createElement('div');
-    group.className = 'word-group';
-    var row = document.createElement('div');
-    row.className = 'word-row';
-    var hintEl = document.createElement('div');
-    row.appendChild(hintEl);
-    var slotEls = entry.phonemes.map(function () {
-      var s = document.createElement('div');
-      row.appendChild(s);
-      return s;
-    });
-    group.appendChild(row);
-    var engEl = document.createElement('div');
-    group.appendChild(engEl);
-    wordListCol.appendChild(group);
-    return { hintEl: hintEl, slotEls: slotEls, engEl: engEl };
-  });
+  var startNewBtn = document.getElementById('startNewBtn');
 
-  // ---------- render: grid cell ----------
   function cellKey(r, c) { return r + ',' + c; }
 
+  function setupPuzzle(words, size) {
+    WORD_DATA = words;
+    GRID_SIZE = size;
+
+    var genResult = generateGrid(WORD_DATA, GRID_SIZE);
+    grid = genResult.grid;
+    wordPhonemeCells = genResult.placedWords;
+    wordCellKeySet = {};
+    Object.keys(wordPhonemeCells).forEach(function (w) { wordPhonemeCells[w].forEach(function (c) { wordCellKeySet[c.row + ',' + c.col] = true; }); });
+    WORD_DATA_BY_WORD = {};
+    WORD_DATA.forEach(function (e) { WORD_DATA_BY_WORD[e.word] = e; });
+
+    foundWords = {};
+    foundCellKeySet = {};
+    isPlayable = false;
+    isPuzzleComplete = false;
+    activeSolves = {};
+    hoverKey = null;
+    dragging = false; dragStart = null; dragPath = [];
+    releaseHeld = {}; releaseFlipping = {};
+    hintActive = null;
+    completionFlipping = {};
+    startNewPuzzleReady = false;
+
+    GREAT_POS = GREAT_POSITIONS[GRID_SIZE];
+    specialCells = [];
+    if (GREAT_POS) for (var k = 0; k < 4; k++) specialCells.push({ row: GREAT_POS.row - 1, col: GREAT_POS.startCol - 1 + k });
+    specialKeySet = {};
+    specialCells.forEach(function (c, i) { specialKeySet[c.row + ',' + c.col] = i; });
+
+    introRevealedCell = []; introFlippingCell = [];
+    finaleCellStage = []; finaleCellFlipping = [];
+    for (var r = 0; r < GRID_SIZE; r++) {
+      introRevealedCell.push([]); introFlippingCell.push([]);
+      finaleCellStage.push([]); finaleCellFlipping.push([]);
+      for (var c = 0; c < GRID_SIZE; c++) {
+        introRevealedCell[r].push(false); introFlippingCell[r].push(false);
+        finaleCellStage[r].push(0); finaleCellFlipping[r].push(false);
+      }
+    }
+    showGreatBox = false; greatBoxRevealed = false; greatBoxFlipping = false;
+
+    wordRowsState = WORD_DATA.map(function (entry) {
+      return {
+        word: entry.word, phonemes: entry.phonemes, isPlaced: !!wordPhonemeCells[entry.word],
+        englishRevealed: false, englishFlipping: false,
+        hintRevealed: false, hintFlipping: false,
+        letterRevealed: entry.phonemes.map(function () { return false; }),
+        letterFlipping: entry.phonemes.map(function () { return false; })
+      };
+    });
+
+    // Rebuild grid DOM
+    gridEl.innerHTML = '';
+    gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 40px)';
+    cellEls = [];
+    for (var r3 = 0; r3 < GRID_SIZE; r3++) {
+      var rowArr = [];
+      for (var c3 = 0; c3 < GRID_SIZE; c3++) {
+        var el = document.createElement('div');
+        el.className = 'gcell empty';
+        el.style.width = '40px'; el.style.height = '40px';
+        (function (rr, cc) {
+          el.addEventListener('mousedown', function () { handleCellMouseDown(rr, cc); });
+          el.addEventListener('mouseenter', function () { handleCellMouseEnter(rr, cc); });
+        })(r3, c3);
+        gridEl.appendChild(el);
+        rowArr.push(el);
+      }
+      cellEls.push(rowArr);
+    }
+
+    // Rebuild word list DOM
+    wordListCol.innerHTML = '';
+    wordRowEls = WORD_DATA.map(function (entry) {
+      var group = document.createElement('div');
+      group.className = 'word-group';
+      var row = document.createElement('div');
+      row.className = 'word-row';
+      var hintEl = document.createElement('div');
+      row.appendChild(hintEl);
+      var slotEls = entry.phonemes.map(function () {
+        var s = document.createElement('div');
+        row.appendChild(s);
+        return s;
+      });
+      group.appendChild(row);
+      var engEl = document.createElement('div');
+      group.appendChild(engEl);
+      wordListCol.appendChild(group);
+      return { hintEl: hintEl, slotEls: slotEls, engEl: engEl };
+    });
+
+    renderAllCells();
+    renderAllWordRows();
+    updateStartNewButton();
+  }
+
+  // ---------- render: grid cell ----------
   function renderCell(r, c) {
     var el = cellEls[r][c]; var key = cellKey(r, c);
     var fStage = finaleCellStage[r][c];
@@ -466,9 +508,18 @@ input:checked + .slider:before { transform: translateX(20px); }
     }
 
     var colorClass = 'grey', flipping = false;
-    if (solveInfo) { colorClass = solveInfo.revealed ? 'green' : 'yellow'; flipping = solveInfo.flipping; }
-    else if (isFound) { colorClass = 'green'; }
-    else if (hintActive && hintActive.cellKey === key && hintActive.revealed) { colorClass = 'yellow'; flipping = hintActive.flipping; }
+    if (solveInfo) {
+    colorClass = solveInfo.revealed ? 'green' : 'yellow';
+    flipping = solveInfo.flipping;
+    } else {
+    var trueColor = isFound ? 'green' : 'grey';
+    if (hintActive && hintActive.cellKey === key) {
+        colorClass = hintActive.revealed ? 'yellow' : trueColor;
+        flipping = hintActive.flipping;
+    } else {
+        colorClass = trueColor;
+    }
+    }
 
     var isDragSelected = dragging && dragPath.some(function (p) { return p.row === r && p.col === c; });
     var isHeld = !!releaseHeld[key];
@@ -564,17 +615,37 @@ input:checked + .slider:before { transform: translateX(20px); }
       }
     }
 
+    var BOX_SIZE = 26, GAP = 4;
+    var engWidth = st.phonemes.length * BOX_SIZE + (st.phonemes.length - 1) * GAP;
+    rowEl.engEl.style.width = engWidth + 'px';
+
     if (!st.englishRevealed && !st.englishFlipping) {
-      rowEl.engEl.className = 'hidden-spacer-wide'; rowEl.engEl.textContent = '';
+        rowEl.engEl.className = 'hidden-spacer-wide'; rowEl.engEl.textContent = '';
     } else if (isFound || (solve && solve.wordBoxRevealed)) {
-      rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
-      rowEl.engEl.textContent = st.word;
+        rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
+        rowEl.engEl.textContent = st.word;
     } else {
-      rowEl.engEl.className = 'eng-box blue' + (st.englishFlipping ? ' tile-flip' : '');
-      rowEl.engEl.textContent = st.word;
+        rowEl.engEl.className = 'eng-box blue' + (st.englishFlipping ? ' tile-flip' : '');
+        rowEl.engEl.textContent = st.word;
     }
   }
   function renderAllWordRows() { for (var i = 0; i < wordRowsState.length; i++) renderWordRow(i); }
+
+  // ---------- Start New Puzzle button ----------
+  function startNewEnabled() { return isPlayable || startNewPuzzleReady; }
+  function updateStartNewButton() {
+    startNewBtn.disabled = !startNewEnabled();
+    startNewBtn.classList.toggle('blue', startNewPuzzleReady);
+  }
+  startNewBtn.addEventListener('click', function () {
+    if (!startNewEnabled()) return;
+    startNewPuzzleReady = false;
+    isPlayable = false;
+    updateStartNewButton();
+    var cfg = generateRandomGameConfig();
+    setupPuzzle(cfg.words, cfg.size);
+    runTitleSequence(function () { startIntroSequence(); });
+  });
 
   // ---------- title demo ----------
   var TCOLS = 9, TROWS = 3;
@@ -694,10 +765,6 @@ input:checked + .slider:before { transform: translateX(20px); }
     function t(fn, delay) { timers.push(setTimeout(fn, delay)); }
     var time = 1000;
 
-    // FIX: loop counters declared with "let" so each cell's deferred
-    // callbacks capture their OWN row/col — with "var" here, every
-    // callback would end up sharing the same final row/col value once
-    // the loop finished, which is why only the last cell was animating.
     for (let row = 0; row < GRID_SIZE; row++) {
       for (let col = 0; col < GRID_SIZE; col++) {
         var start = time + col * CELL_STAGGER_MS;
@@ -740,7 +807,7 @@ input:checked + .slider:before { transform: translateX(20px); }
       stage3MaxEnd = Math.max(stage3MaxEnd, cursor);
     });
 
-    t(function () { isPlayable = true; }, stage3MaxEnd);
+    t(function () { isPlayable = true; updateStartNewButton(); }, stage3MaxEnd);
   }
 
   // ---------- interaction ----------
@@ -824,7 +891,6 @@ input:checked + .slider:before { transform: translateX(20px); }
     var cells = wordPhonemeCells[word];
     if (!cells) return;
     var length = cells.length;
-    var idx = WORD_DATA.findIndex(function (e) { return e.word === word; });
 
     activeSolves[word] = {
       hintFlipping: false, hintRevealed: false,
@@ -851,7 +917,9 @@ input:checked + .slider:before { transform: translateX(20px); }
     setTimeout(function () { activeSolves[word].wordBoxFlipping = true; renderAllWordRows(); }, lettersEnd);
     setTimeout(function () { activeSolves[word].wordBoxRevealed = true; renderAllWordRows(); }, lettersEnd + FLIP_MS / 2);
     setTimeout(function () {
-      foundWords[word] = true; recomputeFoundCellKeys();
+      foundWords[word] = true;
+      foundCellKeySet = {};
+      Object.keys(foundWords).forEach(function (w) { (wordPhonemeCells[w] || []).forEach(function (c) { foundCellKeySet[c.row + ',' + c.col] = true; }); });
       activeSolves[word].wordBoxFlipping = false;
       delete activeSolves[word];
       renderAllCells(); renderAllWordRows();
@@ -864,20 +932,20 @@ input:checked + .slider:before { transform: translateX(20px); }
   // ---------- completion flourish + finale ----------
   function runCompletionSequence() {
     isPlayable = false;
+    updateStartNewButton();
     var timers = [];
     function t(fn, delay) { timers.push(setTimeout(fn, delay)); }
 
     var flourishDuration = (GRID_SIZE - 1) * COMPLETION_ROW_STAGGER_MS + (GRID_SIZE - 1) * COMPLETION_CELL_STAGGER_MS + FLIP_MS;
 
-    // FIX: same "let" fix applied to all three finale loops below.
     for (let row = 0; row < GRID_SIZE; row++) {
-      var rowStart = row * COMPLETION_ROW_STAGGER_MS;
-      for (let col = 0; col < GRID_SIZE; col++) {
-        var key = cellKey(row, col);
-        var start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
-        t(function () { completionFlipping[key] = true; renderCell(row, col); }, start);
-        t(function () { delete completionFlipping[key]; renderCell(row, col); }, start + FLIP_MS);
-      }
+        let rowStart = row * COMPLETION_ROW_STAGGER_MS;
+        for (let col = 0; col < GRID_SIZE; col++) {
+            let key = cellKey(row, col);
+            let start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
+            t(function () { completionFlipping[key] = true; renderCell(row, col); }, start);
+            t(function () { delete completionFlipping[key]; renderCell(row, col); }, start + FLIP_MS);
+        }
     }
 
     var time = flourishDuration + FINALE_WAIT_MS;
@@ -907,11 +975,13 @@ input:checked + .slider:before { transform: translateX(20px); }
     t(function () { showGreatBox = true; greatBoxFlipping = true; renderGreatBoxOverlay(); }, stage2End);
     t(function () { greatBoxRevealed = true; renderGreatBoxOverlay(); }, stage2End + FLIP_MS / 2);
     t(function () { greatBoxFlipping = false; renderGreatBoxOverlay(); }, stage2End + FLIP_MS);
+
+    t(function () { startNewPuzzleReady = true; updateStartNewButton(); }, stage2End + FLIP_MS + START_NEW_PUZZLE_HOLD_MS);
   }
 
   // ---------- boot ----------
-  renderAllCells();
-  renderAllWordRows();
+  document.getElementById('gridWrap').addEventListener('mouseleave', function () { if (!dragging) { hoverKey = null; } });
+  setupPuzzle(INITIAL_WORD_DATA, INITIAL_GRID_SIZE);
   runTitleSequence(function () { startIntroSequence(); });
 })();
 </script>

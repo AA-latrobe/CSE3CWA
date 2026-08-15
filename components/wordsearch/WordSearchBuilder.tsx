@@ -586,6 +586,7 @@ export default function WordSearchBuilder() {
           letterStates={letterStates}
           isPlayable={isPlayable && !isPuzzleComplete}
           completionFlipSignal={completionFlipSignal}
+          onStartNewPuzzle={handleBuildPuzzle}
           isDarkTheme={theme === 'dark'}
           isHighContrast={highContrast}
         />

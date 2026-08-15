@@ -10,8 +10,6 @@ type Props = {
   reveal: boolean;
 };
 
-// 32px boxes + 4px gaps: 5 boxes = 5*32 + 4*4 = 176px, matching the
-// w-44 (176px) Reset Game button below when the word has 5 phonemes.
 const BOX_SIZE = 32;
 const BOX_GAP = 4;
 
@@ -31,6 +29,32 @@ export default function SolutionReveal({ phonemes, englishWord, message, reveal 
   const phonemesRef = useRef(phonemes);
   phonemesRef.current = phonemes;
 
+  // If the WORD itself changed (Play Next Word / Start Over), snap the
+  // display back to blank immediately, synchronously with the prop
+  // change — not deferred to the effect below, which only fires after
+  // render and would otherwise show the PREVIOUS word's revealed letters
+  // against the NEW word's boxes for one frame.
+  const wordKey = phonemes.join('|');
+  const prevWordKeyRef = useRef(wordKey);
+  if (prevWordKeyRef.current !== wordKey) {
+    prevWordKeyRef.current = wordKey;
+    // Safe to call setState during render when it's this kind of
+    // "derive from a changed prop" reset — React bails out of the
+    // in-progress render and re-renders with the new state immediately.
+    if (displayed.length !== phonemes.length || displayed.some((d) => d !== null)) {
+      setDisplayed(phonemes.map(() => null));
+    }
+    if (flipping.some((f) => f)) {
+      setFlipping(phonemes.map(() => false));
+    }
+    if (wordBoxRevealed) setWordBoxRevealed(false);
+    if (wordBoxFlipping) setWordBoxFlipping(false);
+    if (messageVisible) setMessageVisible(false);
+    wasRevealed.current = false;
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }
+
   useEffect(() => {
     const current = phonemesRef.current;
 
@@ -38,7 +62,6 @@ export default function SolutionReveal({ phonemes, englishWord, message, reveal 
       timers.current.forEach(clearTimeout);
       timers.current = [];
 
-      // Stage 1: phoneme boxes flip left to right.
       current.forEach((symbol, i) => {
         const delay = i * GUESS_FLIP_STAGGER_MS;
         timers.current.push(
@@ -66,7 +89,6 @@ export default function SolutionReveal({ phonemes, englishWord, message, reveal 
         );
       });
 
-      // Stage 2: once every phoneme box has finished, flip the word box.
       const phonemesEnd = (current.length - 1) * GUESS_FLIP_STAGGER_MS + GUESS_FLIP_DURATION_MS;
 
       timers.current.push(
@@ -75,7 +97,6 @@ export default function SolutionReveal({ phonemes, englishWord, message, reveal 
         setTimeout(() => setWordBoxFlipping(false), phonemesEnd + GUESS_FLIP_DURATION_MS)
       );
 
-      // Stage 3: once the word box flip finishes, show the message.
       const wordBoxEnd = phonemesEnd + GUESS_FLIP_DURATION_MS;
       timers.current.push(setTimeout(() => setMessageVisible(true), wordBoxEnd));
     }
@@ -105,13 +126,13 @@ export default function SolutionReveal({ phonemes, englishWord, message, reveal 
         {phonemes.map((symbol, i) => (
           <div key={i} style={{ perspective: '400px' }}>
             <div
-                title={displayed[i] ? getPhonemeHoverText(displayed[i]!) : undefined}
-                className={`flex items-center justify-center rounded-md text-base font-semibold ${
-                    displayed[i]
-                    ? 'bg-match text-match-foreground'
-                    : 'border border-foreground/20 text-foreground'
-                } ${flipping[i] ? 'animate-tile-flip' : ''}`}
-                style={{ height: BOX_SIZE, width: BOX_SIZE }}
+              title={displayed[i] ? getPhonemeHoverText(displayed[i]!) : undefined}
+              className={`flex items-center justify-center rounded-md text-base font-semibold ${
+                displayed[i]
+                  ? 'bg-match text-match-foreground'
+                  : 'border border-foreground/20 text-foreground'
+              } ${flipping[i] ? 'animate-tile-flip' : ''}`}
+              style={{ height: BOX_SIZE, width: BOX_SIZE }}
             >
               {displayed[i] ?? ''}
             </div>
@@ -119,23 +140,19 @@ export default function SolutionReveal({ phonemes, englishWord, message, reveal 
         ))}
       </div>
 
-      {/* English word box — always rendered from the start (empty/bordered),
-          so it never shifts layout when it flips to filled. */}
       <div className="mt-2" style={{ perspective: '400px', width }}>
         <div
-            className={`flex items-center justify-center rounded-md text-lg font-semibold ${
-                wordBoxRevealed
-                ? 'bg-word-reveal text-word-reveal-foreground'
-                : 'border border-foreground/20 text-foreground'
-            } ${wordBoxFlipping ? 'animate-tile-flip' : ''}`}
-            style={{ height: 36, width }}
+          className={`flex items-center justify-center rounded-md text-lg font-semibold ${
+            wordBoxRevealed
+              ? 'bg-word-reveal text-word-reveal-foreground'
+              : 'border border-foreground/20 text-foreground'
+          } ${wordBoxFlipping ? 'animate-tile-flip' : ''}`}
+          style={{ height: 36, width }}
         >
-            {wordBoxRevealed ? englishWord : ''}
+          {wordBoxRevealed ? englishWord : ''}
         </div>
       </div>
 
-      {/* Message — fixed-height row so its appearance never pushes
-          Reset Game down, regardless of message length. */}
       <div className="mt-2 flex h-6 w-full items-center justify-center">
         <p className="text-sm font-bold text-foreground">{messageVisible ? message : ''}</p>
       </div>

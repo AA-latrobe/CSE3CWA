@@ -122,7 +122,11 @@ export default function GuessGrid({
               type="button"
               onClick={onPlayNextWord}
               disabled={!isGameOver}
-              className="w-full rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              className={`w-full rounded-md px-3 py-1.5 text-sm font-medium hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40 ${
+                isLastWord
+                  ? 'bg-word-reveal text-word-reveal-foreground'
+                  : 'bg-accent text-match-foreground'
+              }`}
             >
               {isLastWord ? 'Start Over!' : 'Play Next Word'}
             </button>

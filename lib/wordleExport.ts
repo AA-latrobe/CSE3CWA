@@ -91,7 +91,14 @@ body {
   border-radius: 0.5rem;
   padding: 1.5rem;
 }
-.title-row { display:flex; justify-content:center; gap:8px; margin-bottom: 44px; }
+.title-row {
+  display:flex; justify-content:center; gap:8px; margin-bottom: 44px;
+  /* Matches the height the Preview panel's "Preview" heading row (text +
+     mb-6) would occupy if it were present but invisible — keeps the
+     title's vertical position consistent between the live Preview and
+     this exported page. */
+  margin-top: 52px;
+}
 .title-tile {
   width:64px; height:64px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
   font-size:1.875rem; font-weight:600; border:2px solid rgba(128,128,128,0.2); color: var(--foreground);
@@ -116,14 +123,18 @@ button.action {
   background: var(--accent); color: white;
 }
 button.action:disabled { opacity:0.4; cursor:not-allowed; }
+button.action.action-blue {
+  background: var(--word-reveal);
+  color: var(--word-reveal-foreground);
+}
 .switch { position:relative; width:44px; height:24px; flex-shrink:0; }
 .switch input { opacity:0; width:0; height:0; }
 .slider { position:absolute; inset:0; background: rgba(128,128,128,0.3); border-radius:999px; cursor:pointer; transition:.2s; }
 .slider:before { content:""; position:absolute; height:18px; width:18px; left:3px; top:3px; background:white; border-radius:50%; transition:.2s; }
 input:checked + .slider { background: var(--accent); }
 input:checked + .slider:before { transform: translateX(20px); }
-.guess-rows-col { display:flex; flex-direction:column; align-items:center; border-left:1px solid rgba(128,128,128,0.15); padding-left:32px; }
-.guess-row { display:flex; gap:4px; margin-bottom:4px; }
+.guess-rows-col { display:flex; flex-direction:column; align-items:center; border-left:1px solid rgba(128,128,128,0.15); padding-left:32px; width:256px; }
+.guess-row { display:flex; gap:4px; margin-bottom:4px; justify-content:center; }
 .guess-tile { width:48px; height:48px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center; font-size:1.25rem; font-weight:600; border:2px solid rgba(128,128,128,0.2); color: var(--foreground); perspective:400px; }
 .keypad-col { flex:1; min-width:0; padding-left:32px; }
 .keypad-grids { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
@@ -144,8 +155,6 @@ input:checked + .slider:before { transform: translateX(20px); }
 .tile-yellow { background: var(--partial); color: var(--partial-foreground); border-color: transparent; }
 .tile-grey { background: var(--key); color: var(--key-foreground); border-color: transparent; }
 .tile-flip { animation: flip 0.5s ease-in-out; }
-.guess-rows-col { display:flex; flex-direction:column; align-items:center; border-left:1px solid rgba(128,128,128,0.15); padding-left:32px; width:256px; }
-.guess-row { display:flex; gap:4px; margin-bottom:4px; justify-content:center; }
 @keyframes flip { 0% { transform: rotateX(0deg); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0deg); } }
 .hardmode-error {
   margin-top: 12px;
@@ -223,6 +232,7 @@ input:checked + .slider:before { transform: translateX(20px); }
   var KEYPAD_BOTTOM = ${keypadBottomJson};
   var TITLE_PHONEMES = ${titlePhonemesJson};
   var FLIP_MS = 500, STAGGER_MS = 150;
+  var POST_REVEAL_HOLD_MS = 1000; // extra pause before Play Next Word/Start Over re-enables
 
   // ---------- theme ----------
   function loadTheme() {
@@ -249,7 +259,6 @@ input:checked + .slider:before { transform: translateX(20px); }
   hcToggle.addEventListener('change', function () { themeState.hc = hcToggle.checked; applyTheme(themeState); });
 
   // ---------- inline Hard Mode error (same placement as the Preview panel) ----------
-  var hardModeErrorTimer = null;
   function showHardModeError(message) {
     document.getElementById('hardModeError').textContent = message;
   }
@@ -336,6 +345,7 @@ input:checked + .slider:before { transform: translateX(20px); }
   var submittedGuesses = [];
   var hardMode = false;
   var solutionRevealed = false;
+  var revealAnimationComplete = true; // true when idle/no game-over reveal pending
 
   function currentWord() { return words[currentWordIndex]; }
   function wordSize() { return currentWord().phonemes.length; }
@@ -488,8 +498,11 @@ input:checked + .slider:before { transform: translateX(20px); }
 
   function updatePlayNextButton() {
     var btn = document.getElementById('playNextBtn');
-    btn.textContent = isLastWord() ? 'Start Over!' : 'Play Next Word';
-    btn.disabled = !gameStatus().gameOver;
+    var last = isLastWord();
+    btn.textContent = last ? 'Start Over!' : 'Play Next Word';
+    var status = gameStatus();
+    btn.disabled = !status.gameOver || !revealAnimationComplete;
+    btn.classList.toggle('action-blue', last);
   }
 
   function updateEnterBackspace() {
@@ -516,11 +529,28 @@ input:checked + .slider:before { transform: translateX(20px); }
     if (solutionRevealed) return;
     var status = gameStatus();
     if (!status.gameOver) return;
+
+    revealAnimationComplete = false;
+    updatePlayNextButton(); // lock the button immediately, before the delay even starts
+
     var rowFlip = (wordSize() - 1) * STAGGER_MS + FLIP_MS;
+
     setTimeout(function () {
       solutionRevealed = true;
       animateSolutionReveal();
     }, rowFlip + 1000);
+
+    // animateSolutionReveal's own final stage (word box flip) completes at
+    // phonemesEnd + FLIP_MS relative to when it starts (rowFlip + 1000).
+    // Add POST_REVEAL_HOLD_MS on top so the button stays locked a little
+    // longer after the animation visually finishes, not the instant it ends.
+    var phonemesEnd = (wordSize() - 1) * STAGGER_MS + FLIP_MS;
+    var totalRevealDuration = phonemesEnd + FLIP_MS;
+
+    setTimeout(function () {
+      revealAnimationComplete = true;
+      updatePlayNextButton();
+    }, rowFlip + 1000 + totalRevealDuration + POST_REVEAL_HOLD_MS);
   }
 
   // ---------- handlers ----------
@@ -565,7 +595,7 @@ input:checked + .slider:before { transform: translateX(20px); }
   }
   function handlePlayNext() {
     var status = gameStatus();
-    if (!status.gameOver) return;
+    if (!status.gameOver || !revealAnimationComplete) return;
     if (isLastWord()) {
       words = shuffle(words);
       currentWordIndex = 0;
@@ -577,6 +607,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     currentGuess = [];
     submittedGuesses = [];
     solutionRevealed = false;
+    revealAnimationComplete = true;
     clearHardModeError();
     renderSolutionEmpty();
     renderAll();

@@ -22,11 +22,11 @@ import {
 import { KEYPAD_TOP, KEYPAD_BOTTOM, PREVIEW_TITLE_PHONEMES, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getInitialWordleState, saveWordleState } from '@/lib/wordleStorage';
 import { downloadStandaloneWordleHtml } from '@/lib/wordleExport';
-import { WORD_LIST } from '@/lib/phonemeData';
 
 const MIN_GUESSES = 3;
 const MAX_GUESSES = 10;
 const SOLUTION_REVEAL_EXTRA_DELAY_MS = 1000;
+const POST_REVEAL_HOLD_MS = 1000; // extra pause before Play Next Word/Start Over re-enables
 
 interface SubmittedGuess {
   symbols: string[];
@@ -67,6 +67,7 @@ export default function WordleBuilder() {
   );
 
   const [solutionRevealed, setSolutionRevealed] = useState(false);
+  const [revealAnimationComplete, setRevealAnimationComplete] = useState(true);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [scrollY, setScrollY] = useState(initial.scrollY);
@@ -94,6 +95,7 @@ export default function WordleBuilder() {
     hasCountedResult.current = false;
 
     setSolutionRevealed(false);
+    setRevealAnimationComplete(true); // new game — nothing pending
     if (revealTimer.current) {
       clearTimeout(revealTimer.current);
       revealTimer.current = null;
@@ -117,9 +119,16 @@ export default function WordleBuilder() {
     }
   }, [submittedGuesses, numGuesses]);
 
+  // Schedules the solution reveal, and separately tracks when that WHOLE
+  // sequence — letters, word box, AND an extra POST_REVEAL_HOLD_MS pause
+  // afterward — has genuinely finished. Play Next Word/Start Over stays
+  // disabled the entire time, preventing the reveal's in-flight timers
+  // from firing against a board that's already been reset for a new word.
   useEffect(() => {
     const status = deriveGameStatus(submittedGuesses, numGuesses);
     if (status.isGameOver && revealTimer.current === null) {
+      setRevealAnimationComplete(false);
+
       const rowFlipDuration = (wordSize - 1) * GUESS_FLIP_STAGGER_MS + GUESS_FLIP_DURATION_MS;
       const totalDelay = rowFlipDuration + SOLUTION_REVEAL_EXTRA_DELAY_MS;
 
@@ -127,6 +136,23 @@ export default function WordleBuilder() {
         setSolutionRevealed(true);
         revealTimer.current = null;
       }, totalDelay);
+
+      // SolutionReveal's own final stage (word box flip) completes at
+      // phonemesEnd + GUESS_FLIP_DURATION_MS relative to when the reveal starts.
+      const phonemesEnd = (wordSize - 1) * GUESS_FLIP_STAGGER_MS + GUESS_FLIP_DURATION_MS;
+      const totalRevealDuration = phonemesEnd + GUESS_FLIP_DURATION_MS;
+
+      const completeTimer = setTimeout(() => {
+        setRevealAnimationComplete(true);
+      }, totalDelay + totalRevealDuration + POST_REVEAL_HOLD_MS);
+
+      return () => {
+        clearTimeout(completeTimer);
+        if (revealTimer.current) {
+          clearTimeout(revealTimer.current);
+          revealTimer.current = null;
+        }
+      };
     }
 
     return () => {
@@ -246,7 +272,7 @@ export default function WordleBuilder() {
   };
 
   const handlePlayNextWord = () => {
-    if (!isGameOver) return;
+    if (!isGameOver || !revealAnimationComplete) return;
 
     if (isLastWord) {
       setCurrentWordIndex(0);
@@ -354,7 +380,7 @@ export default function WordleBuilder() {
               currentWordNumber={currentWordIndex + 1}
               solvedCount={solvedCount}
               failedCount={failedCount}
-              isGameOver={isGameOver}
+              isGameOver={isGameOver && revealAnimationComplete}
               isLastWord={isLastWord}
               onPlayNextWord={handlePlayNextWord}
               solutionPhonemes={previewWord?.phonemes ?? []}

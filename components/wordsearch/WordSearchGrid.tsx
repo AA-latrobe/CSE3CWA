@@ -308,6 +308,7 @@ export default function WordSearchGrid({
   const [completionFlipping, setCompletionFlipping] = useState<Set<string>>(new Set());
   const [finaleCellState, setFinaleCellState] = useState<FinaleCellState[][]>([]);
   const [finalePhase, setFinalePhase] = useState<0 | 1 | 2>(0);
+  const [greatConnectedCount, setGreatConnectedCount] = useState(0);
   const [showEnglishBox, setShowEnglishBox] = useState(false);
   const [englishBoxFlipping, setEnglishBoxFlipping] = useState(false);
   const [englishBoxRevealed, setEnglishBoxRevealed] = useState(false);
@@ -319,10 +320,22 @@ export default function WordSearchGrid({
     return computeConnectorSegments(wordPhonemeCells, foundWords, solves, cellSize, MIN_GAP);
   }, [wordPhonemeCells, foundWords, solves, cellSize, finalePhase]);
 
+  // Progressive: only reveal each "great" connector once the SPECIFIC
+  // special cell it connects to has genuinely finished its own flip —
+  // not the instant finalePhase becomes 1 (which is when the whole
+  // stage starts, before any individual symbol has appeared).
   const greatConnectorSegments = useMemo(() => {
     if (finalePhase !== 1) return [];
-    return computeSegmentsForCellSequence(specialCells, cellSize, MIN_GAP, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, 'great');
-  }, [finalePhase, specialCells, cellSize]);
+    const all = computeSegmentsForCellSequence(
+      specialCells,
+      cellSize,
+      MIN_GAP,
+      CONNECTOR_THICKNESS,
+      CONNECTOR_OVERLAP,
+      'great'
+    );
+    return all.slice(0, greatConnectedCount);
+  }, [finalePhase, specialCells, cellSize, greatConnectedCount]);
 
   useEffect(() => {
     if (completionFlipSignal === 0) return;
@@ -331,6 +344,7 @@ export default function WordSearchGrid({
     completionTimersRef.current = [];
 
     setFinalePhase(0);
+    setGreatConnectedCount(0);
     setCompletionFlipping(new Set());
     setFinaleCellState(
       Array.from({ length: gridSize }, () =>
@@ -403,6 +417,14 @@ export default function WordSearchGrid({
             }),
           start + COMPLETION_FLIP_MS
         );
+
+        // This cell's own flip finishes at start + COMPLETION_FLIP_MS —
+        // if it's one of the "great" special cells, reveal the connector
+        // BACK to the previous special cell at that exact moment.
+        const specialIdx = specialCells.findIndex((sc) => sc.row === r && sc.col === c);
+        if (specialIdx > 0) {
+          t(() => setGreatConnectedCount(specialIdx), start + COMPLETION_FLIP_MS);
+        }
       }
     }
 
@@ -496,6 +518,7 @@ export default function WordSearchGrid({
     completionTimersRef.current.forEach(clearTimeout);
     completionTimersRef.current = [];
     setFinalePhase(0);
+    setGreatConnectedCount(0);
     setCompletionFlipping(new Set());
     setFinaleCellState([]);
     setShowEnglishBox(false);

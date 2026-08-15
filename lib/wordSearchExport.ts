@@ -94,7 +94,7 @@ body {
   border-radius: 0.5rem;
   padding: 1.5rem;
 }
-.title-row { display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-top: 52px; margin-bottom: 44px; width: 396px; margin-left: auto; margin-right: auto; }
+.title-row { display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-top: 52px; margin-bottom: 44px; width: 396px; margin-left: auto; margin-right: auto; position: relative; }
 .title-tile {
   width:40px; height:40px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
   font-size:1rem; font-weight:500; border:2px solid rgba(128,128,128,0.2); color: var(--foreground);
@@ -153,6 +153,8 @@ body {
 .great-box.hidden { border:2px solid transparent; background: transparent; }
 .great-box.revealed { background: var(--word-reveal); color: var(--word-reveal-foreground); }
 
+.connector { position: absolute; background: var(--match); border-radius: 1px; pointer-events: none; }
+
 .start-new-wrap { margin-top:24px; display:flex; justify-content:center; }
 .start-new-btn {
   border-radius:0.375rem; padding:6px 12px; font-size:0.875rem; font-weight:500; cursor:pointer; border:none;
@@ -195,7 +197,10 @@ input:checked + .slider:before { transform: translateX(20px); }
     </div>
     <div class="grid-col">
       <div id="gridWrap" style="display:flex; justify-content:center;">
-        <div id="grid" style="display:grid; gap:4px;"></div>
+        <div id="gridInner" style="position:relative;">
+          <div id="grid" style="display:grid; gap:4px;"></div>
+          <div id="connectorOverlay" style="position:absolute; inset:0; pointer-events:none;"></div>
+        </div>
       </div>
       <div class="start-new-wrap">
         <button class="start-new-btn" id="startNewBtn" disabled>Start New Puzzle</button>
@@ -247,6 +252,8 @@ input:checked + .slider:before { transform: translateX(20px); }
   var TITLE_REVEAL_STAGGER_MS = FLIP_MS / 2;
   var TITLE_FLOURISH_STAGGER_MS = TITLE_REVEAL_STAGGER_MS / 2;
   var TITLE_FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2;
+  var CONNECTOR_THICKNESS = 3;
+  var CONNECTOR_OVERLAP = 3;
 
   var ALL_PHONEME_SYMBOLS = KEYPAD_TOP.concat(KEYPAD_BOTTOM).reduce(function (acc, row) { return acc.concat(row); }, []).filter(function (s) { return s; });
 
@@ -280,6 +287,54 @@ input:checked + .slider:before { transform: translateX(20px); }
   hcToggle.checked = themeState.hc;
   darkToggle.addEventListener('change', function () { themeState.dark = darkToggle.checked; applyTheme(themeState); });
   hcToggle.addEventListener('change', function () { themeState.hc = hcToggle.checked; applyTheme(themeState); });
+
+  // ---------- connector geometry (shared by word connectors, "great" connectors, and the title demo) ----------
+  function computeSegmentsForCellSequence(cellsArr, cellSize, gap, thickness, overlap, keyPrefix) {
+    var step = cellSize + gap;
+    var segments = [];
+    for (var i = 0; i < cellsArr.length - 1; i++) {
+      var a = cellsArr[i], b = cellsArr[i + 1];
+      var dRow = b.row - a.row, dCol = b.col - a.col;
+      var key = keyPrefix + '-' + i;
+      if (dRow === 0) {
+        var leftCol = Math.min(a.col, b.col);
+        var left = leftCol * step + cellSize - overlap;
+        var top = a.row * step + cellSize / 2 - thickness / 2;
+        segments.push({ key: key, left: left, top: top, width: gap + overlap * 2, height: thickness, rotationDeg: 0 });
+      } else if (dCol === 0) {
+        var topRow = Math.min(a.row, b.row);
+        var top2 = topRow * step + cellSize - overlap;
+        var left2 = a.col * step + cellSize / 2 - thickness / 2;
+        segments.push({ key: key, left: left2, top: top2, width: thickness, height: gap + overlap * 2, rotationDeg: 0 });
+      } else {
+        var leftCol2 = Math.min(a.col, b.col);
+        var topRow2 = Math.min(a.row, b.row);
+        var gapLeft = leftCol2 * step + cellSize;
+        var gapTop = topRow2 * step + cellSize;
+        var centerX = gapLeft + gap / 2;
+        var centerY = gapTop + gap / 2;
+        var length = gap * Math.SQRT2 + overlap * 2;
+        var sameSign = dRow * dCol > 0;
+        var rotationDeg = sameSign ? 45 : -45;
+        segments.push({ key: key, left: centerX - length / 2, top: centerY - thickness / 2, width: length, height: thickness, rotationDeg: rotationDeg });
+      }
+    }
+    return segments;
+  }
+  function renderSegmentsInto(overlayEl, segments) {
+    if (!overlayEl) return;
+    overlayEl.innerHTML = '';
+    segments.forEach(function (seg) {
+      var div = document.createElement('div');
+      div.className = 'connector';
+      div.style.left = seg.left + 'px';
+      div.style.top = seg.top + 'px';
+      div.style.width = seg.width + 'px';
+      div.style.height = seg.height + 'px';
+      if (seg.rotationDeg) div.style.transform = 'rotate(' + seg.rotationDeg + 'deg)';
+      overlayEl.appendChild(div);
+    });
+  }
 
   // ---------- grid generation ----------
   var DIRECTIONS = [{ dx: 1, dy: 0, o: 'h' }, { dx: 0, dy: 1, o: 'v' }, { dx: 1, dy: 1, o: 'd' }, { dx: -1, dy: 1, o: 'd' }];
@@ -362,12 +417,48 @@ input:checked + .slider:before { transform: translateX(20px); }
   var showGreatBox, greatBoxRevealed, greatBoxFlipping;
   var wordRowsState, startNewPuzzleReady;
   var cellEls, wordRowEls;
+  var finalePhase; // 0 = normal play; 1 = finale green-empty phase (great cells filled); 2 = finale blue-empty phase (great cells gone)
+  var greatConnectedCount; // how many "great" connector segments are currently revealed, progressive during phase 1
 
   var gridEl = document.getElementById('grid');
+  var gridInnerEl = document.getElementById('gridInner');
+  var connectorOverlayEl = document.getElementById('connectorOverlay');
   var wordListCol = document.getElementById('wordListCol');
   var startNewBtn = document.getElementById('startNewBtn');
 
   function cellKey(r, c) { return r + ',' + c; }
+
+  // ---------- connectors: found words + "great" cells ----------
+  function computeWordConnectorSegments() {
+    var segments = [];
+    for (var word in wordPhonemeCells) {
+      var cells = wordPhonemeCells[word];
+      var isFound = !!foundWords[word];
+      var solve = activeSolves[word];
+      for (var i = 0; i < cells.length - 1; i++) {
+        var visible = isFound || (solve && solve.letterRevealed[i] && solve.letterRevealed[i + 1]);
+        if (!visible) continue;
+        segments = segments.concat(
+          computeSegmentsForCellSequence([cells[i], cells[i + 1]], 40, 4, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, word + '-' + i)
+        );
+      }
+    }
+    return segments;
+  }
+  function computeGreatConnectorSegments() {
+    // Only visible during phase 1 (green-empty phase), and only the
+    // segments that have progressively been earned so far — NOT every
+    // segment the instant phase 1 begins, which would show connectors
+    // to symbols that haven't actually flipped into view yet.
+    if (finalePhase !== 1) return [];
+    var all = computeSegmentsForCellSequence(specialCells, 40, 4, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, 'great');
+    return all.slice(0, greatConnectedCount);
+  }
+  function renderConnectors() {
+    var segments = finalePhase === 0 ? computeWordConnectorSegments() : [];
+    segments = segments.concat(computeGreatConnectorSegments());
+    renderSegmentsInto(connectorOverlayEl, segments);
+  }
 
   function setupPuzzle(words, size) {
     WORD_DATA = words;
@@ -392,6 +483,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     hintActive = null;
     completionFlipping = {};
     startNewPuzzleReady = false;
+    finalePhase = 0;
+    greatConnectedCount = 0;
 
     GREAT_POS = GREAT_POSITIONS[GRID_SIZE];
     specialCells = [];
@@ -424,6 +517,9 @@ input:checked + .slider:before { transform: translateX(20px); }
     // Rebuild grid DOM
     gridEl.innerHTML = '';
     gridEl.style.gridTemplateColumns = 'repeat(' + GRID_SIZE + ', 40px)';
+    gridInnerEl.style.width = (GRID_SIZE * 40 + (GRID_SIZE - 1) * 4) + 'px';
+    gridInnerEl.style.height = (GRID_SIZE * 40 + (GRID_SIZE - 1) * 4) + 'px';
+    connectorOverlayEl.innerHTML = '';
     cellEls = [];
     for (var r3 = 0; r3 < GRID_SIZE; r3++) {
       var rowArr = [];
@@ -514,16 +610,16 @@ input:checked + .slider:before { transform: translateX(20px); }
 
     var colorClass = 'grey', flipping = false;
     if (solveInfo) {
-    colorClass = solveInfo.revealed ? 'green' : 'yellow';
-    flipping = solveInfo.flipping;
+      colorClass = solveInfo.revealed ? 'green' : 'yellow';
+      flipping = solveInfo.flipping;
     } else {
-    var trueColor = isFound ? 'green' : 'grey';
-    if (hintActive && hintActive.cellKey === key) {
+      var trueColor = isFound ? 'green' : 'grey';
+      if (hintActive && hintActive.cellKey === key) {
         colorClass = hintActive.revealed ? 'yellow' : trueColor;
         flipping = hintActive.flipping;
-    } else {
+      } else {
         colorClass = trueColor;
-    }
+      }
     }
 
     var isDragSelected = dragging && dragPath.some(function (p) { return p.row === r && p.col === c; });
@@ -544,6 +640,7 @@ input:checked + .slider:before { transform: translateX(20px); }
 
   function renderAllCells() {
     for (var r = 0; r < GRID_SIZE; r++) for (var c = 0; c < GRID_SIZE; c++) renderCell(r, c);
+    renderConnectors();
   }
 
   function renderGreatBoxOverlay() {
@@ -625,13 +722,13 @@ input:checked + .slider:before { transform: translateX(20px); }
     rowEl.engEl.style.width = engWidth + 'px';
 
     if (!st.englishRevealed && !st.englishFlipping) {
-        rowEl.engEl.className = 'hidden-spacer-wide'; rowEl.engEl.textContent = '';
+      rowEl.engEl.className = 'hidden-spacer-wide'; rowEl.engEl.textContent = '';
     } else if (isFound || (solve && solve.wordBoxRevealed)) {
-        rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
-        rowEl.engEl.textContent = st.word;
+      rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
+      rowEl.engEl.textContent = st.word;
     } else {
-        rowEl.engEl.className = 'eng-box blue' + (st.englishFlipping ? ' tile-flip' : '');
-        rowEl.engEl.textContent = st.word;
+      rowEl.engEl.className = 'eng-box blue' + (st.englishFlipping ? ' tile-flip' : '');
+      rowEl.engEl.textContent = st.word;
     }
   }
   function renderAllWordRows() { for (var i = 0; i < wordRowsState.length; i++) renderWordRow(i); }
@@ -649,7 +746,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     updateStartNewButton();
     var cfg = generateRandomGameConfig();
     setupPuzzle(cfg.words, cfg.size);
-    runTitleSequence(function () { startIntroSequence(); });
+    startIntroSequence();
   });
 
   // ---------- title demo ----------
@@ -661,6 +758,8 @@ input:checked + .slider:before { transform: translateX(20px); }
   function tFlatIndex(row, col) { return (row - 1) * TCOLS + (col - 1); }
   var TWORD1 = [tFlatIndex(2, 2), tFlatIndex(2, 3), tFlatIndex(2, 4)];
   var TWORD2 = [tFlatIndex(1, 6), tFlatIndex(2, 7), tFlatIndex(3, 8)];
+  var TWORD1_CELLS = [{ row: 1, col: 1 }, { row: 1, col: 2 }, { row: 1, col: 3 }];
+  var TWORD2_CELLS = [{ row: 0, col: 5 }, { row: 1, col: 6 }, { row: 2, col: 7 }];
 
   var titleRow = document.getElementById('titleRow');
   var titleFixedMap = {};
@@ -677,6 +776,22 @@ input:checked + .slider:before { transform: translateX(20px); }
     titleRow.appendChild(tt);
     titleTiles.push(tt);
   }
+  var titleConnectorOverlay = document.createElement('div');
+  titleConnectorOverlay.id = 'titleConnectorOverlay';
+  titleConnectorOverlay.style.position = 'absolute';
+  titleConnectorOverlay.style.inset = '0';
+  titleConnectorOverlay.style.pointerEvents = 'none';
+  titleRow.appendChild(titleConnectorOverlay);
+
+  var TWORD1_SEGMENTS = computeSegmentsForCellSequence(TWORD1_CELLS, 40, 4, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, 'title-word1');
+  var TWORD2_SEGMENTS = computeSegmentsForCellSequence(TWORD2_CELLS, 40, 4, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, 'title-word2');
+  var word1ConnectedCount = 0;
+  var word2ConnectedCount = 0;
+  function renderTitleConnectors() {
+    var segs = TWORD1_SEGMENTS.slice(0, word1ConnectedCount).concat(TWORD2_SEGMENTS.slice(0, word2ConnectedCount));
+    renderSegmentsInto(titleConnectorOverlay, segs);
+  }
+
   var titleWordBox = document.getElementById('titleWordBox');
   var titleSearchBox = document.getElementById('titleSearchBox');
 
@@ -694,6 +809,10 @@ input:checked + .slider:before { transform: translateX(20px); }
     var timers = [];
     function t(fn, delay) { timers.push(setTimeout(fn, delay)); }
     var time = TITLE_INITIAL_DELAY_MS;
+
+    word1ConnectedCount = 0;
+    word2ConnectedCount = 0;
+    renderTitleConnectors();
 
     for (var row = 1; row <= TROWS; row++) {
       var rowIndices = []; for (var col = 1; col <= TCOLS; col++) rowIndices.push(tFlatIndex(row, col));
@@ -724,6 +843,9 @@ input:checked + .slider:before { transform: translateX(20px); }
       t((function (idx) { return function () { setTitleCell(idx, 'yellow', true); }; })(idx), start);
       t((function (idx) { return function () { setTitleCell(idx, 'green', true); }; })(idx), start + FLIP_MS / 2);
       t((function (idx) { return function () { setTitleCell(idx, 'green', false); }; })(idx), start + FLIP_MS);
+      if (i > 0) {
+        t((function (i) { return function () { word1ConnectedCount = i; renderTitleConnectors(); }; })(i), start + FLIP_MS / 2);
+      }
     });
     var word1End = time + (TWORD1.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
     t(function () { setTitleBox(titleWordBox, 'blue', true); }, word1End);
@@ -738,6 +860,9 @@ input:checked + .slider:before { transform: translateX(20px); }
       t((function (idx) { return function () { setTitleCell(idx, 'yellow', true); }; })(idx), start);
       t((function (idx) { return function () { setTitleCell(idx, 'green', true); }; })(idx), start + FLIP_MS / 2);
       t((function (idx) { return function () { setTitleCell(idx, 'green', false); }; })(idx), start + FLIP_MS);
+      if (i > 0) {
+        t((function (i) { return function () { word2ConnectedCount = i; renderTitleConnectors(); }; })(i), start + FLIP_MS / 2);
+      }
     });
     var word2End = time + (TWORD2.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
     t(function () { setTitleBox(titleSearchBox, 'blue', true); }, word2End);
@@ -944,27 +1069,39 @@ input:checked + .slider:before { transform: translateX(20px); }
     var flourishDuration = (GRID_SIZE - 1) * COMPLETION_ROW_STAGGER_MS + (GRID_SIZE - 1) * COMPLETION_CELL_STAGGER_MS + FLIP_MS;
 
     for (let row = 0; row < GRID_SIZE; row++) {
-        let rowStart = row * COMPLETION_ROW_STAGGER_MS;
-        for (let col = 0; col < GRID_SIZE; col++) {
-            let key = cellKey(row, col);
-            let start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
-            t(function () { completionFlipping[key] = true; renderCell(row, col); }, start);
-            t(function () { delete completionFlipping[key]; renderCell(row, col); }, start + FLIP_MS);
-        }
+      let rowStart = row * COMPLETION_ROW_STAGGER_MS;
+      for (let col = 0; col < GRID_SIZE; col++) {
+        let key = cellKey(row, col);
+        let start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
+        t(function () { completionFlipping[key] = true; renderCell(row, col); }, start);
+        t(function () { delete completionFlipping[key]; renderCell(row, col); }, start + FLIP_MS);
+      }
     }
 
     var time = flourishDuration + FINALE_WAIT_MS;
+    t(function () { finalePhase = 1; greatConnectedCount = 0; renderConnectors(); }, time);
 
     for (let row2 = 0; row2 < GRID_SIZE; row2++) {
-      var rowStart2 = time + row2 * COMPLETION_ROW_STAGGER_MS;
+      let rowStart2 = time + row2 * COMPLETION_ROW_STAGGER_MS;
       for (let col2 = 0; col2 < GRID_SIZE; col2++) {
-        var start2 = rowStart2 + col2 * COMPLETION_CELL_STAGGER_MS;
-        t(function () { finaleCellFlipping[row2][col2] = true; renderCell(row2, col2); }, start2);
-        t(function () { finaleCellStage[row2][col2] = 1; renderCell(row2, col2); }, start2 + FLIP_MS / 2);
-        t(function () { finaleCellFlipping[row2][col2] = false; renderCell(row2, col2); }, start2 + FLIP_MS);
+        let start2 = rowStart2 + col2 * COMPLETION_CELL_STAGGER_MS;
+        let r2 = row2, c2 = col2;
+        t(function () { finaleCellFlipping[r2][c2] = true; renderCell(r2, c2); }, start2);
+        t(function () { finaleCellStage[r2][c2] = 1; renderCell(r2, c2); }, start2 + FLIP_MS / 2);
+        t(function () { finaleCellFlipping[r2][c2] = false; renderCell(r2, c2); }, start2 + FLIP_MS);
+
+        // This cell's own flip finishes at start2 + FLIP_MS — if it's one
+        // of the "great" special cells, reveal the connector BACK to the
+        // previous special cell at that exact moment (not the instant
+        // the whole finale stage began).
+        var specialIdx = specialCells.findIndex(function (sc) { return sc.row === r2 && sc.col === c2; });
+        if (specialIdx > 0) {
+          t((function (specialIdx) { return function () { greatConnectedCount = specialIdx; renderConnectors(); }; })(specialIdx), start2 + FLIP_MS);
+        }
       }
     }
     time += flourishDuration + FINALE_WAIT_MS;
+    t(function () { finalePhase = 2; renderConnectors(); }, time);
 
     for (let row3 = 0; row3 < GRID_SIZE; row3++) {
       var rowStart3 = time + row3 * COMPLETION_ROW_STAGGER_MS;

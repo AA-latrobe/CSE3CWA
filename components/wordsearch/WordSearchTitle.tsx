@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { KEYPAD_TOP, KEYPAD_BOTTOM, getPhonemeHoverText } from '@/lib/phonemeData';
+import { computeSegmentsForCellSequence, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP } from '@/lib/wordSearchConnectors';
 
 const ALL_PHONEME_SYMBOLS = [...KEYPAD_TOP, ...KEYPAD_BOTTOM]
   .flat()
@@ -12,6 +13,8 @@ function randomPhoneme(): string {
 
 const COLS = 9;
 const ROWS = 3;
+const TITLE_CELL_SIZE = 40;
+const TITLE_GAP = 4; // matches gap-1
 
 const FIXED_CELLS: { row: number; col: number; symbol: string }[] = [
   { row: 2, col: 2, symbol: 'w' },
@@ -28,6 +31,19 @@ function flatIndex(row: number, col: number) {
 
 const WORD1_INDICES = [flatIndex(2, 2), flatIndex(2, 3), flatIndex(2, 4)];
 const WORD2_INDICES = [flatIndex(1, 6), flatIndex(2, 7), flatIndex(3, 8)];
+
+// Same positions as WORD1_INDICES/WORD2_INDICES, but as 0-indexed
+// row/col pairs — what computeSegmentsForCellSequence expects.
+const WORD1_CELLS = [
+  { row: 1, col: 1 },
+  { row: 1, col: 2 },
+  { row: 1, col: 3 },
+];
+const WORD2_CELLS = [
+  { row: 0, col: 5 },
+  { row: 1, col: 6 },
+  { row: 2, col: 7 },
+];
 
 type CellColor = 'grey' | 'yellow' | 'green';
 interface CellState {
@@ -70,6 +86,8 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
   );
   const [wordBox, setWordBox] = useState<BoxState>(emptyBoxState);
   const [searchBox, setSearchBox] = useState<BoxState>(emptyBoxState);
+  const [word1ConnectedCount, setWord1ConnectedCount] = useState(0);
+  const [word2ConnectedCount, setWord2ConnectedCount] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Always call the LATEST onComplete, not whichever version was current
@@ -78,6 +96,31 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
   // by the time this fires (several seconds later) it needs fresh state.
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  const word1Segments = useMemo(
+    () =>
+      computeSegmentsForCellSequence(
+        WORD1_CELLS,
+        TITLE_CELL_SIZE,
+        TITLE_GAP,
+        CONNECTOR_THICKNESS,
+        CONNECTOR_OVERLAP,
+        'title-word1'
+      ),
+    []
+  );
+  const word2Segments = useMemo(
+    () =>
+      computeSegmentsForCellSequence(
+        WORD2_CELLS,
+        TITLE_CELL_SIZE,
+        TITLE_GAP,
+        CONNECTOR_THICKNESS,
+        CONNECTOR_OVERLAP,
+        'title-word2'
+      ),
+    []
+  );
 
   useEffect(() => {
     const fixedMap = new Map<string, string>();
@@ -93,6 +136,8 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     setCellStates(Array.from({ length: ROWS * COLS }, emptyCellState));
     setWordBox(emptyBoxState());
     setSearchBox(emptyBoxState());
+    setWord1ConnectedCount(0);
+    setWord2ConnectedCount(0);
 
     const t = (fn: () => void, delay: number) => {
       timers.current.push(setTimeout(fn, delay));
@@ -151,18 +196,16 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     const REVEAL_STAGGER_MS = FLIP_MS / 2;
 
     for (let row = 1; row <= ROWS; row++) {
-    const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
+      const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
 
-    let rowEnd = time;
-    rowIndices.forEach((idx, i) => {
+      rowIndices.forEach((idx, i) => {
         const start = time + i * CELL_STAGGER_MS;
         t(() => setCellsFlipping([idx], true), start);
         t(() => revealCells([idx], 'grey'), start + FLIP_MS / 2);
         t(() => setCellsFlipping([idx], false), start + FLIP_MS);
-        rowEnd = Math.max(rowEnd, start + FLIP_MS);
-    });
+      });
 
-    time += REVEAL_STAGGER_MS; // next ROW still starts on the same schedule as before
+      time += REVEAL_STAGGER_MS; // next ROW still starts on the same schedule as before
     }
 
     t(() => setBoxFlipping('word', true), time);
@@ -187,6 +230,13 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
       t(() => setCellFlipping(idx, true), start);
       t(() => setCellColorFlip(idx, 'green'), start + FLIP_MS / 2);
       t(() => setCellFlipping(idx, false), start + FLIP_MS);
+      // Segment i-1 connects THIS cell back to the previous one — reveal
+      // it the instant this cell turns green, so connectors grow
+      // progressively alongside the letters instead of all appearing at
+      // once at the end.
+      if (i > 0) {
+        t(() => setWord1ConnectedCount(i), start + FLIP_MS / 2);
+      }
     });
     const word1LettersEnd = time + (WORD1_INDICES.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
 
@@ -206,6 +256,9 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
       t(() => setCellFlipping(idx, true), start);
       t(() => setCellColorFlip(idx, 'green'), start + FLIP_MS / 2);
       t(() => setCellFlipping(idx, false), start + FLIP_MS);
+      if (i > 0) {
+        t(() => setWord2ConnectedCount(i), start + FLIP_MS / 2);
+      }
     });
     const word2LettersEnd = time + (WORD2_INDICES.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
 
@@ -219,15 +272,15 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     const FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2; // keep the flourish's cell ripple proportionally faster too
 
     for (let row = 1; row <= ROWS; row++) {
-    const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
+      const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
 
-    rowIndices.forEach((idx, i) => {
+      rowIndices.forEach((idx, i) => {
         const start = time + i * FLOURISH_CELL_STAGGER_MS;
         t(() => setCellsFlipping([idx], true), start);
         t(() => setCellsFlipping([idx], false), start + FLIP_MS);
-    });
+      });
 
-    time += FLOURISH_STAGGER_MS;
+      time += FLOURISH_STAGGER_MS;
     }
 
     t(() => setBoxFlipping('word', true), time);
@@ -261,23 +314,51 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
   return (
     <div>
       <div className="flex justify-center" style={{ marginBottom: 44 }}>
-        <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, 40px)` }}>
-          {cellStates.map((state, i) => {
-            const symbol = symbolsRef.current[i];
-            return (
-              <div key={i} style={{ perspective: '400px' }}>
-                <div
-                  title={state.revealed ? getPhonemeHoverText(symbol) : undefined}
-                  className={`flex items-center justify-center rounded-md text-base font-medium ${cellClass(
-                    state
-                  )} ${state.flipping ? 'animate-tile-flip' : ''}`}
-                  style={{ width: 40, height: 40 }}
-                >
-                  {state.revealed ? symbol : ''}
+        <div
+          style={{
+            position: 'relative',
+            width: COLS * TITLE_CELL_SIZE + (COLS - 1) * TITLE_GAP,
+            height: ROWS * TITLE_CELL_SIZE + (ROWS - 1) * TITLE_GAP,
+          }}
+        >
+          <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${COLS}, 40px)` }}>
+            {cellStates.map((state, i) => {
+              const symbol = symbolsRef.current[i];
+              return (
+                <div key={i} style={{ perspective: '400px' }}>
+                  <div
+                    title={state.revealed ? getPhonemeHoverText(symbol) : undefined}
+                    className={`flex items-center justify-center rounded-md text-base font-medium ${cellClass(
+                      state
+                    )} ${state.flipping ? 'animate-tile-flip' : ''}`}
+                    style={{ width: 40, height: 40 }}
+                  >
+                    {state.revealed ? symbol : ''}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            {[...word1Segments.slice(0, word1ConnectedCount), ...word2Segments.slice(0, word2ConnectedCount)].map(
+              (seg) => (
+                <div
+                  key={seg.key}
+                  className="bg-match"
+                  style={{
+                    position: 'absolute',
+                    left: seg.left,
+                    top: seg.top,
+                    width: seg.width,
+                    height: seg.height,
+                    borderRadius: 1,
+                    transform: seg.rotationDeg ? `rotate(${seg.rotationDeg}deg)` : undefined,
+                  }}
+                />
+              )
+            )}
+          </div>
         </div>
       </div>
 

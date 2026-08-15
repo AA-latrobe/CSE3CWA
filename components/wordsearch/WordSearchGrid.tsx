@@ -7,8 +7,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import ToggleSwitch from '@/components/shared/ToggleSwitch';
 import WordSearchWordListPreview from './WordSearchWordListPreview';
 import type { SolveState } from './WordSearchBuilder';
-import { PhonemeWordEntry, getPhonemeHoverText } from '@/lib/phonemeData';
-import { getWordCountForGridSize } from '@/lib/wordSearchData';
+import { PhonemeWordEntry, WORD_LIST, getPhonemeHoverText } from '@/lib/phonemeData';
+import { getWordCountForGridSize, GREAT_WORD_POSITIONS } from '@/lib/wordSearchData';
 
 const MAX_CELL_SIZE = 40;
 const MIN_CELL_SIZE = 24;
@@ -18,10 +18,12 @@ const ROW_GAP = 24;
 const COMPLETION_CELL_STAGGER_MS = 15;
 const COMPLETION_ROW_STAGGER_MS = 80;
 const COMPLETION_FLIP_MS = 500;
+const FINALE_WAIT_MS = 1000; // pause between each finale stage
 
 type HintState = { word: string; phonemeIndex: number; nonce: number } | null;
 type Cell = { row: number; col: number };
 type SolveCellInfo = { flipping: boolean; revealed: boolean } | null;
+type FinaleCellState = { stage: 0 | 1 | 2; flipping: boolean };
 
 interface IntroLetterState {
   word: string;
@@ -88,6 +90,10 @@ function GridCellView({
   introRevealed,
   introFlipping,
   completionFlipping,
+  finaleStage,
+  finaleFlipping,
+  isSpecialCell,
+  specialSymbol,
   onMouseDown,
   onMouseEnter,
 }: {
@@ -103,11 +109,50 @@ function GridCellView({
   introRevealed: boolean;
   introFlipping: boolean;
   completionFlipping: boolean;
+  finaleStage: 0 | 1 | 2;
+  finaleFlipping: boolean;
+  isSpecialCell: boolean;
+  specialSymbol: string | undefined;
   onMouseDown: () => void;
   onMouseEnter: () => void;
 }) {
   const { flipping: hintFlipping, revealed: hintRevealed } = useHintFlip(hintTriggerId);
   const { flipping: selFlipping, highlighted: selHighlighted } = useSelectionReleaseFlip(releaseToken);
+
+  // Finale sequence overrides everything else — grid is already
+  // unplayable and fully solved by the time this ever activates.
+  if (finaleStage > 0) {
+    let cls: string;
+    let content = '';
+    let titleAttr: string | undefined;
+
+    if (finaleStage === 1) {
+      if (isSpecialCell) {
+        cls = 'bg-match text-match-foreground';
+        content = specialSymbol ?? '';
+        titleAttr = specialSymbol ? getPhonemeHoverText(specialSymbol) : undefined;
+      } else {
+        cls = 'border-2 border-match bg-background';
+      }
+    } else {
+      // stage 2 — special cells disappear entirely (no border, no fill)
+      cls = isSpecialCell ? 'border-2 border-transparent bg-transparent' : 'border-2 border-word-reveal bg-background';
+    }
+
+    return (
+      <div style={{ perspective: '400px' }}>
+        <div
+          title={titleAttr}
+          className={`flex items-center justify-center rounded-md ${cls} ${
+            finaleFlipping ? 'animate-tile-flip' : ''
+          }`}
+          style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+        >
+          {content}
+        </div>
+      </div>
+    );
+  }
 
   if (!introRevealed) {
     return (
@@ -153,9 +198,6 @@ function GridCellView({
     isFlipping = true;
   }
 
-  // Completion flourish overrides only the flip flag, never the color —
-  // every cell keeps whatever it already looked like (solved green, or
-  // grey/dark-grey filler) through this closing flip.
   if (completionFlipping) {
     isFlipping = true;
   }
@@ -239,6 +281,18 @@ export default function WordSearchGrid({
     return map;
   }, [solves, wordPhonemeCells]);
 
+  // "great" special-cell positions for the finale — computed once per grid size.
+  const { specialCells, specialKeySet, greatPhonemes } = useMemo(() => {
+    const pos = GREAT_WORD_POSITIONS[gridSize];
+    const entry = WORD_LIST.find((w) => w.word === 'great');
+    const phonemes = entry ? entry.phonemes : [];
+    const cells: Cell[] = pos
+      ? Array.from({ length: 4 }, (_, i) => ({ row: pos.row - 1, col: pos.startCol - 1 + i }))
+      : [];
+    const keySet = new Set(cells.map((c) => `${c.row},${c.col}`));
+    return { specialCells: cells, specialKeySet: keySet, greatPhonemes: phonemes };
+  }, [gridSize]);
+
   const [hoverKey, setHoverKey] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragPath, setDragPath] = useState<Cell[]>([]);
@@ -248,35 +302,144 @@ export default function WordSearchGrid({
   const isDraggingRef = useRef(false);
   const releaseCounter = useRef(0);
 
-  // --- completion flourish ---
+  // --- completion flourish + finale sequence ---
   const [completionFlipping, setCompletionFlipping] = useState<Set<string>>(new Set());
+  const [finaleCellState, setFinaleCellState] = useState<FinaleCellState[][]>([]);
+  const [showEnglishBox, setShowEnglishBox] = useState(false);
+  const [englishBoxFlipping, setEnglishBoxFlipping] = useState(false);
+  const [englishBoxRevealed, setEnglishBoxRevealed] = useState(false);
   const completionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    if (completionFlipSignal === 0) return;
+    if (completionFlipSignal === 0) return; // 0 is the initial/reset value — don't fire on mount
 
     completionTimersRef.current.forEach(clearTimeout);
     completionTimersRef.current = [];
 
+    setCompletionFlipping(new Set());
+    setFinaleCellState(
+      Array.from({ length: gridSize }, () =>
+        Array.from({ length: gridSize }, () => ({ stage: 0 as const, flipping: false }))
+      )
+    );
+    setShowEnglishBox(false);
+    setEnglishBoxFlipping(false);
+    setEnglishBoxRevealed(false);
+
+    const t = (fn: () => void, delay: number) => {
+      completionTimersRef.current.push(setTimeout(fn, delay));
+    };
+
+    const flourishDuration =
+      (gridSize - 1) * COMPLETION_ROW_STAGGER_MS + (gridSize - 1) * COMPLETION_CELL_STAGGER_MS + COMPLETION_FLIP_MS;
+
+    // Stage 0: existing "colors preserved" flourish.
     for (let row = 0; row < gridSize; row++) {
       const rowStart = row * COMPLETION_ROW_STAGGER_MS;
       for (let col = 0; col < gridSize; col++) {
         const key = `${row},${col}`;
         const start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
-        completionTimersRef.current.push(
-          setTimeout(() => {
-            setCompletionFlipping((prev) => new Set(prev).add(key));
-          }, start),
-          setTimeout(() => {
+        t(() => setCompletionFlipping((prev) => new Set(prev).add(key)), start);
+        t(
+          () =>
             setCompletionFlipping((prev) => {
               const next = new Set(prev);
               next.delete(key);
               return next;
-            });
-          }, start + COMPLETION_FLIP_MS)
+            }),
+          start + COMPLETION_FLIP_MS
         );
       }
     }
+
+    let time = flourishDuration + FINALE_WAIT_MS;
+
+    // Stage 1: green phase — every cell gets a green border/empty white,
+    // except the 4 special cells, which fill green with "great"'s letters.
+    for (let row = 0; row < gridSize; row++) {
+      const rowStart = time + row * COMPLETION_ROW_STAGGER_MS;
+      for (let col = 0; col < gridSize; col++) {
+        const r = row;
+        const c = col;
+        const start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
+        t(
+          () =>
+            setFinaleCellState((prev) => {
+              const next = prev.map((rr) => [...rr]);
+              if (next[r]?.[c]) next[r][c] = { ...next[r][c], flipping: true };
+              return next;
+            }),
+          start
+        );
+        t(
+          () =>
+            setFinaleCellState((prev) => {
+              const next = prev.map((rr) => [...rr]);
+              if (next[r]?.[c]) next[r][c] = { ...next[r][c], stage: 1 };
+              return next;
+            }),
+          start + COMPLETION_FLIP_MS / 2
+        );
+        t(
+          () =>
+            setFinaleCellState((prev) => {
+              const next = prev.map((rr) => [...rr]);
+              if (next[r]?.[c]) next[r][c] = { ...next[r][c], flipping: false };
+              return next;
+            }),
+          start + COMPLETION_FLIP_MS
+        );
+      }
+    }
+
+    time += flourishDuration + FINALE_WAIT_MS;
+
+    // Stage 2: blue phase — every cell gets a blue border/empty white,
+    // except the 4 special cells, which disappear entirely.
+    for (let row = 0; row < gridSize; row++) {
+      const rowStart = time + row * COMPLETION_ROW_STAGGER_MS;
+      for (let col = 0; col < gridSize; col++) {
+        const r = row;
+        const c = col;
+        const start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
+        t(
+          () =>
+            setFinaleCellState((prev) => {
+              const next = prev.map((rr) => [...rr]);
+              if (next[r]?.[c]) next[r][c] = { ...next[r][c], flipping: true };
+              return next;
+            }),
+          start
+        );
+        t(
+          () =>
+            setFinaleCellState((prev) => {
+              const next = prev.map((rr) => [...rr]);
+              if (next[r]?.[c]) next[r][c] = { ...next[r][c], stage: 2 };
+              return next;
+            }),
+          start + COMPLETION_FLIP_MS / 2
+        );
+        t(
+          () =>
+            setFinaleCellState((prev) => {
+              const next = prev.map((rr) => [...rr]);
+              if (next[r]?.[c]) next[r][c] = { ...next[r][c], flipping: false };
+              return next;
+            }),
+          start + COMPLETION_FLIP_MS
+        );
+      }
+    }
+
+    const stage2End = time + flourishDuration;
+
+    // Stage 3: once the grid has FULLY finished flipping (no extra wait),
+    // flip in the "Great!" box where the 4 special cells used to be.
+    t(() => setShowEnglishBox(true), stage2End);
+    t(() => setEnglishBoxFlipping(true), stage2End);
+    t(() => setEnglishBoxRevealed(true), stage2End + COMPLETION_FLIP_MS / 2);
+    t(() => setEnglishBoxFlipping(false), stage2End + COMPLETION_FLIP_MS);
 
     return () => completionTimersRef.current.forEach(clearTimeout);
   }, [completionFlipSignal, gridSize]);
@@ -375,6 +538,7 @@ export default function WordSearchGrid({
           {Array.from({ length: gridSize * gridSize }).map((_, i) => {
             const row = Math.floor(i / gridSize);
             const col = i % gridSize;
+            const key = `${row},${col}`;
 
             const gridIsValidSize =
               placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
@@ -390,11 +554,42 @@ export default function WordSearchGrid({
               );
             }
 
+            const specialIndex = specialCells.findIndex((c) => c.row === row && c.col === col);
+            const isSpecialCell = specialIndex !== -1;
+
+            // Once the "Great!" box is showing, the first special cell
+            // becomes a single spanning item; the other 3 aren't rendered
+            // at all — CSS Grid packs everything else around it correctly
+            // since the spanned item consumes the same 4 tracks they did.
+            if (showEnglishBox && isSpecialCell) {
+              if (specialIndex === 0) {
+                return (
+                  <div key={i} style={{ gridColumn: 'span 4', perspective: '400px' }}>
+                    <div
+                      className={`flex items-center justify-center rounded-md font-semibold ${
+                        englishBoxRevealed
+                          ? 'bg-word-reveal text-word-reveal-foreground'
+                          : 'border-2 border-transparent bg-transparent'
+                      } ${englishBoxFlipping ? 'animate-tile-flip' : ''}`}
+                      style={{ height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+                    >
+                      {englishBoxRevealed ? 'Great!' : ''}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            }
+
+            const cellFinale = finaleCellState[row]?.[col];
+            const finaleStage = cellFinale?.stage ?? 0;
+            const finaleFlipping = cellFinale?.flipping ?? false;
+            const specialSymbol = isSpecialCell ? greatPhonemes[specialIndex] : undefined;
+
             const cellFlipInfo = gridCellFlip[row]?.[col];
             const introRevealed = Boolean(cellFlipInfo?.revealed);
             const introFlipping = Boolean(cellFlipInfo?.flipping);
 
-            const key = `${row},${col}`;
             const symbol = placedGrid![row][col];
             const isWordCell = wordCellKeys.has(key);
             const isFoundCell = foundCellKeys.has(key);
@@ -429,6 +624,10 @@ export default function WordSearchGrid({
                 introRevealed={introRevealed}
                 introFlipping={introFlipping}
                 completionFlipping={isCompletionFlipping}
+                finaleStage={finaleStage}
+                finaleFlipping={finaleFlipping}
+                isSpecialCell={isSpecialCell}
+                specialSymbol={specialSymbol}
                 onMouseDown={() => handleCellMouseDown(row, col)}
                 onMouseEnter={() => handleCellMouseEnter(row, col)}
               />

@@ -103,7 +103,8 @@ body {
 .title-tile.grey { border:none; background: var(--key); color: var(--key-foreground); }
 .title-tile.yellow { background: var(--partial); color: var(--partial-foreground); border-color: transparent; }
 .title-tile.green { background: var(--match); color: var(--match-foreground); border-color: transparent; }
-.subtitle-row { display:flex; align-items:center; justify-content:center; gap:4px; font-size:1.125rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
+.subtitle-row { display:flex; align-items:center; justify-content:center; gap:4px; font-size:1.125rem; color: rgba(128,128,128,0.9); margin: 0 0 30px 0; }
+.instructions-row { text-align:center; font-size:1rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
 .title-word-box {
   width:128px; height:40px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
   font-size:1.125rem; font-weight:600; border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground);
@@ -111,6 +112,7 @@ body {
 }
 .title-word-box.blue { background: var(--word-reveal); color: var(--word-reveal-foreground); border-color: transparent; }
 .title-word-box.solved { border: 2px solid var(--word-reveal); background: var(--background); color: var(--foreground); text-decoration: line-through; }
+.export-footer { text-align:center; padding: 16px; font-size:0.875rem; color: rgba(128,128,128,0.8); }
 
 .game-row { display:flex; gap:24px; flex-wrap: wrap; }
 .wordlist-col { width:176px; flex-shrink:0; }
@@ -185,6 +187,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     <div class="title-word-box" id="titleSearchBox"></div>
     <span>Game</span>
   </div>
+  <p class="instructions-row">To make a guess, click on a phoneme symbol and hold down your mouse while dragging, then release.</p>
   <div class="game-row">
     <div class="wordlist-col">
       <p class="wordlist-title">Word List:</p>
@@ -210,6 +213,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     </div>
   </div>
 </div>
+
+<p class="export-footer">Adam Ashmore — Student Number: 22670379</p>
 
 <script>
 (function () {

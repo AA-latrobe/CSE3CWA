@@ -105,6 +105,7 @@ body {
   perspective: 400px;
 }
 .subtitle { text-align:center; color: rgba(128,128,128,0.9); font-size:1.125rem; margin: 0 0 44px 0; }
+.export-footer { text-align:center; padding: 16px; font-size:0.875rem; color: rgba(128,128,128,0.8); }
 .legend { display:flex; align-items:center; justify-content:center; gap:8px; font-size:0.875rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
 .legend-swatch { width:28px; height:28px; border-radius:0.25rem; }
 .legend-sep { margin: 0 8px; color: rgba(128,128,128,0.5); }
@@ -223,6 +224,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     </div>
   </div>
 </div>
+
+<p class="export-footer">Adam Ashmore — Student Number: 22670379</p>
 
 <script>
 (function () {

@@ -8,7 +8,7 @@ type Props = {
 export default function NavBar({ activeView, onChange }: Props) {
   const tabs: { id: View; label: string }[] = [
     { id: 'home', label: 'Home' },
-    { id: 'wordle', label: 'Wordle' },
+    { id: 'wordle', label: 'Phoneme Wordle' },
     { id: 'wordsearch', label: 'Word Search' },
   ];
 

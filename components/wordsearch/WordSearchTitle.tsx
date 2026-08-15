@@ -283,7 +283,7 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
 
       <div
         className="flex items-center justify-center gap-1 text-lg text-foreground/70"
-        style={{ marginBottom: 44 }}
+        style={{ marginBottom: 30 }}
       >
         <span>A Phoneme</span>
         <div style={{ perspective: '400px' }}>
@@ -307,6 +307,12 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
           </div>
         </div>
         <span>Game</span>
+      </div>
+      <div
+        className="flex items-center justify-center gap-2 text-base text-foreground/70"
+        style={{ marginBottom: 44 }}
+      >
+        <span>To make a guess, click on a phoneme symbol and hold down your mouse while dragging, then release.</span>
       </div>
     </div>
   );

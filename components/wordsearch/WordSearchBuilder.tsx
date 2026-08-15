@@ -31,11 +31,20 @@ export interface SolveState {
   wordBoxRevealed: boolean;
 }
 
+interface IntroLetterState {
+  word: string;
+  revealed: boolean[];
+  flipping: boolean[];
+}
+
 const SOLVE_FLIP_MS = 500;
 const SOLVE_STAGGER_MS = 150;
 const SOLVE_HOLD_MS = 1000;
 
-const INTRO_FLIP_MS = 500; // matches SOLVE_FLIP_MS — kept as its own constant since intro timing is conceptually separate
+const INTRO_FLIP_MS = 500;
+const CELL_STAGGER_MS = 60; // gap between successive cells starting within one row (grid intro reveal)
+const LETTER_STAGGER_MS = 60; // gap between successive letters starting within one word (word list intro reveal)
+const GRID_ROW_STAGGER_MS = 80;
 
 export default function WordSearchBuilder() {
   const { theme, highContrast } = useTheme();
@@ -58,13 +67,18 @@ export default function WordSearchBuilder() {
   const [titleSignal, setTitleSignal] = useState(0);
 
   // --- intro reveal sequence state ---
-  const [gridRowFlip, setGridRowFlip] = useState<{ revealed: boolean; flipping: boolean }[]>([]);
-  const [wordPairRevealed, setWordPairRevealed] = useState<Set<string>>(new Set());
-  const [wordPairFlippingWord, setWordPairFlippingWord] = useState<string | null>(null);
+  const [gridCellFlip, setGridCellFlip] = useState<{ revealed: boolean; flipping: boolean }[][]>([]);
+  const [englishRevealed, setEnglishRevealed] = useState<Set<string>>(new Set());
+  const [englishFlippingWords, setEnglishFlippingWords] = useState<Set<string>>(new Set());
   const [hintRevealed, setHintRevealed] = useState<Set<string>>(new Set());
-  const [hintFlippingWord, setHintFlippingWord] = useState<string | null>(null);
+  const [hintFlippingWords, setHintFlippingWords] = useState<Set<string>>(new Set());
+  const [letterStates, setLetterStates] = useState<IntroLetterState[]>([]);
   const [isPlayable, setIsPlayable] = useState(false);
   const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // --- completion flourish state ---
+  const [completionFlipSignal, setCompletionFlipSignal] = useState(0);
+  const hasTriggeredCompletionRef = useRef(false);
 
   const hintCounter = useRef(0);
   const solveNonceRef = useRef(0);
@@ -99,10 +113,12 @@ export default function WordSearchBuilder() {
 
   const isPuzzleComplete = placedWords.length > 0 && foundWords.size === placedWords.length;
 
+  // Fires the completion flourish exactly once per puzzle, the moment
+  // the last word gets found.
   useEffect(() => {
-    if (isPuzzleComplete) {
-      // Placeholder — a full-puzzle-complete celebration animation can
-      // hook in here later.
+    if (isPuzzleComplete && !hasTriggeredCompletionRef.current) {
+      hasTriggeredCompletionRef.current = true;
+      setCompletionFlipSignal((n) => n + 1);
     }
   }, [isPuzzleComplete]);
 
@@ -117,22 +133,34 @@ export default function WordSearchBuilder() {
     introTimersRef.current = [];
   };
 
-  // Resets everything intro-related back to "not yet revealed" — called
-  // whenever a fresh puzzle is built, so the grid/word list/hints all
-  // start hidden again and wait for the new intro sequence to run.
-  const resetIntroState = (size: number) => {
+  const resetIntroState = (size: number, words: PhonemeWordEntry[]) => {
     clearIntroTimers();
-    setGridRowFlip(Array.from({ length: size }, () => ({ revealed: false, flipping: false })));
-    setWordPairRevealed(new Set());
-    setWordPairFlippingWord(null);
+    setGridCellFlip(
+      Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => ({ revealed: false, flipping: false }))
+      )
+    );
+    setEnglishRevealed(new Set());
+    setEnglishFlippingWords(new Set());
     setHintRevealed(new Set());
-    setHintFlippingWord(null);
+    setHintFlippingWords(new Set());
+    setLetterStates(
+      words.map((w) => ({
+        word: w.word,
+        revealed: Array(w.phonemes.length).fill(false),
+        flipping: Array(w.phonemes.length).fill(false),
+      }))
+    );
     setIsPlayable(false);
+    hasTriggeredCompletionRef.current = false;
+    setCompletionFlipSignal(0);
   };
 
-  // Runs the grid-reveal → word-pairs → hints → playable sequence. Called
-  // once the title animation reports it's finished (via handleTitleComplete
-  // below), and only if a puzzle is actually built at that moment.
+  // Orchestrates the post-title reveal: grid rows (cells within a row
+  // stagger slightly, rows overlap with each other), then a pass
+  // revealing only English word boxes, then a per-row pass revealing the
+  // hint "?" box followed by each phoneme letter (letters within a word
+  // stagger slightly too — fast but not simultaneous).
   const startIntroSequence = () => {
     clearIntroTimers();
 
@@ -140,72 +168,134 @@ export default function WordSearchBuilder() {
       introTimersRef.current.push(setTimeout(fn, delay));
     };
 
-    // Overlapping stagger — same technique used in the title's own reveal —
-    // roughly doubles perceived speed vs. waiting a full flip to finish
-    // before starting the next row/pair/hint.
     const STAGGER_MS = INTRO_FLIP_MS / 2;
-
     let time = 1000;
 
+    // Stage 1: grid rows — cells within a row stagger, rows overlap.
+    let stage1End = time;
     for (let row = 0; row < gridSize; row++) {
-      t(
-        () =>
-          setGridRowFlip((prev) => {
-            const next = [...prev];
-            next[row] = { ...next[row], flipping: true };
-            return next;
-          }),
-        time
-      );
-      t(
-        () =>
-          setGridRowFlip((prev) => {
-            const next = [...prev];
-            next[row] = { ...next[row], revealed: true };
-            return next;
-          }),
-        time + INTRO_FLIP_MS / 2
-      );
-      t(
-        () =>
-          setGridRowFlip((prev) => {
-            const next = [...prev];
-            next[row] = { ...next[row], flipping: false };
-            return next;
-          }),
-        time + INTRO_FLIP_MS
-      );
-      time += STAGGER_MS;
+      let rowEnd = time;
+      for (let col = 0; col < gridSize; col++) {
+        const cellStart = time + col * CELL_STAGGER_MS;
+        t(
+          () =>
+            setGridCellFlip((prev) => {
+              const next = prev.map((r) => [...r]);
+              if (next[row]?.[col]) next[row][col] = { ...next[row][col], flipping: true };
+              return next;
+            }),
+          cellStart
+        );
+        t(
+          () =>
+            setGridCellFlip((prev) => {
+              const next = prev.map((r) => [...r]);
+              if (next[row]?.[col]) next[row][col] = { ...next[row][col], revealed: true };
+              return next;
+            }),
+          cellStart + INTRO_FLIP_MS / 2
+        );
+        t(
+          () =>
+            setGridCellFlip((prev) => {
+              const next = prev.map((r) => [...r]);
+              if (next[row]?.[col]) next[row][col] = { ...next[row][col], flipping: false };
+              return next;
+            }),
+          cellStart + INTRO_FLIP_MS
+        );
+        rowEnd = Math.max(rowEnd, cellStart + INTRO_FLIP_MS);
+      }
+      stage1End = Math.max(stage1End, rowEnd);
+      time += GRID_ROW_STAGGER_MS; // was: time += STAGGER_MS
     }
-    // Make sure the last row's flip has genuinely finished before the next
-    // phase starts — the loop above overlaps items WITHIN a phase, but
-    // phases themselves should stay sequential.
-    time += INTRO_FLIP_MS - STAGGER_MS;
+    time = stage1End;
 
-    for (const entry of selectedWords) {
+    // Stage 2: English word boxes only, one overlapping pass down the list.
+    selectedWords.forEach((entry, idx) => {
       const word = entry.word;
-      t(() => setWordPairFlippingWord(word), time);
-      t(() => setWordPairRevealed((prev) => new Set(prev).add(word)), time + INTRO_FLIP_MS / 2);
-      t(() => setWordPairFlippingWord(null), time + INTRO_FLIP_MS);
-      time += STAGGER_MS;
-    }
-    time += INTRO_FLIP_MS - STAGGER_MS;
+      const start = time + idx * STAGGER_MS;
+      t(() => setEnglishFlippingWords((prev) => new Set(prev).add(word)), start);
+      t(() => setEnglishRevealed((prev) => new Set(prev).add(word)), start + INTRO_FLIP_MS / 2);
+      t(
+        () =>
+          setEnglishFlippingWords((prev) => {
+            const next = new Set(prev);
+            next.delete(word);
+            return next;
+          }),
+        start + INTRO_FLIP_MS
+      );
+    });
+    const stage2End =
+      selectedWords.length > 0 ? time + (selectedWords.length - 1) * STAGGER_MS + INTRO_FLIP_MS : time;
+    time = stage2End;
 
-    const placedEntries = selectedWords.filter((w) => wordPhonemeCells[w.word]);
-    for (const entry of placedEntries) {
+    // Stage 3: per row — hint box (if placed) then each phoneme letter in
+    // quick succession. Rows themselves overlap with each other.
+    let stage3MaxEnd = time;
+    selectedWords.forEach((entry, idx) => {
       const word = entry.word;
-      t(() => setHintFlippingWord(word), time);
-      t(() => setHintRevealed((prev) => new Set(prev).add(word)), time + INTRO_FLIP_MS / 2);
-      t(() => setHintFlippingWord(null), time + INTRO_FLIP_MS);
-      time += STAGGER_MS;
-    }
-    time += INTRO_FLIP_MS - STAGGER_MS;
+      const isPlaced = Boolean(wordPhonemeCells[word]);
+      let cursor = time + idx * STAGGER_MS;
 
-    t(() => setIsPlayable(true), time);
+      if (isPlaced) {
+        const hintStart = cursor;
+        t(() => setHintFlippingWords((prev) => new Set(prev).add(word)), hintStart);
+        t(() => setHintRevealed((prev) => new Set(prev).add(word)), hintStart + INTRO_FLIP_MS / 2);
+        t(
+          () =>
+            setHintFlippingWords((prev) => {
+              const next = new Set(prev);
+              next.delete(word);
+              return next;
+            }),
+          hintStart + INTRO_FLIP_MS
+        );
+        cursor += INTRO_FLIP_MS;
+      }
+
+      let letterEnd = cursor;
+      entry.phonemes.forEach((_, letterIndex) => {
+        const letterStart = cursor;
+        t(
+          () =>
+            setLetterStates((prev) =>
+              prev.map((s) =>
+                s.word === word ? { ...s, flipping: s.flipping.map((f, i) => (i === letterIndex ? true : f)) } : s
+              )
+            ),
+          letterStart
+        );
+        t(
+          () =>
+            setLetterStates((prev) =>
+              prev.map((s) =>
+                s.word === word ? { ...s, revealed: s.revealed.map((r, i) => (i === letterIndex ? true : r)) } : s
+              )
+            ),
+          letterStart + INTRO_FLIP_MS / 2
+        );
+        t(
+          () =>
+            setLetterStates((prev) =>
+              prev.map((s) =>
+                s.word === word ? { ...s, flipping: s.flipping.map((f, i) => (i === letterIndex ? false : f)) } : s
+              )
+            ),
+          letterStart + INTRO_FLIP_MS
+        );
+        letterEnd = letterStart + INTRO_FLIP_MS;
+        cursor += LETTER_STAGGER_MS;
+      });
+      cursor = letterEnd;
+
+      stage3MaxEnd = Math.max(stage3MaxEnd, cursor);
+    });
+
+    t(() => setIsPlayable(true), stage3MaxEnd);
   };
 
-  // Passed to WordSearchTitle as onComplete — fires after the title's
-  // full animation (including its closing flourish) finishes.
   const handleTitleComplete = () => {
     if (placedGrid) {
       startIntroSequence();
@@ -323,7 +413,7 @@ export default function WordSearchBuilder() {
     setHint(null);
     setFoundWords(new Set());
     clearAllSolves();
-    resetIntroState(gridSize);
+    resetIntroState(gridSize, selectedWords);
   }, [selectedWords]);
 
   const handleAddRandom = () => {
@@ -352,12 +442,12 @@ export default function WordSearchBuilder() {
     setHint(null);
     setFoundWords(new Set());
     clearAllSolves();
-    resetIntroState(gridSize);
+    resetIntroState(gridSize, selectedWords);
     setTitleSignal((n) => n + 1);
   };
 
   useEffect(() => {
-    setTitleSignal((n) => n + 1); // randomise + play title animation once on mount
+    setTitleSignal((n) => n + 1);
   }, []);
 
   useEffect(() => {
@@ -480,12 +570,14 @@ export default function WordSearchBuilder() {
           foundWords={foundWords}
           solves={solves}
           onWordMatched={handleWordMatched}
-          gridRowFlip={gridRowFlip}
-          wordPairRevealed={wordPairRevealed}
-          wordPairFlippingWord={wordPairFlippingWord}
+          gridCellFlip={gridCellFlip}
+          englishRevealed={englishRevealed}
+          englishFlippingWords={englishFlippingWords}
           hintRevealed={hintRevealed}
-          hintFlippingWord={hintFlippingWord}
-          isPlayable={isPlayable}
+          hintFlippingWords={hintFlippingWords}
+          letterStates={letterStates}
+          isPlayable={isPlayable && !isPuzzleComplete}
+          completionFlipSignal={completionFlipSignal}
           isDarkTheme={theme === 'dark'}
           isHighContrast={highContrast}
         />

@@ -49,6 +49,7 @@ const SWIPE_STAGGER_MS = 100;
 const SWIPE_HOLD_MS = 500;
 const SOLVE_STAGGER_MS = 150;
 const GAP_BETWEEN_WORDS_MS = 500;
+const CELL_STAGGER_MS = 60; // gap between successive cells starting within one row
 
 function emptyCellState(): CellState {
   return { revealed: false, flipping: false, color: 'grey' };
@@ -150,20 +151,27 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     const REVEAL_STAGGER_MS = FLIP_MS / 2;
 
     for (let row = 1; row <= ROWS; row++) {
-      const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
-      t(() => setCellsFlipping(rowIndices, true), time);
-      t(() => revealCells(rowIndices, 'grey'), time + FLIP_MS / 2);
-      t(() => setCellsFlipping(rowIndices, false), time + FLIP_MS);
-      time += REVEAL_STAGGER_MS;
+    const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
+
+    let rowEnd = time;
+    rowIndices.forEach((idx, i) => {
+        const start = time + i * CELL_STAGGER_MS;
+        t(() => setCellsFlipping([idx], true), start);
+        t(() => revealCells([idx], 'grey'), start + FLIP_MS / 2);
+        t(() => setCellsFlipping([idx], false), start + FLIP_MS);
+        rowEnd = Math.max(rowEnd, start + FLIP_MS);
+    });
+
+    time += REVEAL_STAGGER_MS; // next ROW still starts on the same schedule as before
     }
 
     t(() => setBoxFlipping('word', true), time);
-    t(() => revealBox('word', 'grey'), time + FLIP_MS / 2);
+    t(() => revealBox('word', 'blue'), time + FLIP_MS / 2);
     t(() => setBoxFlipping('word', false), time + FLIP_MS);
     time += REVEAL_STAGGER_MS;
 
     t(() => setBoxFlipping('search', true), time);
-    t(() => revealBox('search', 'grey'), time + FLIP_MS / 2);
+    t(() => revealBox('search', 'blue'), time + FLIP_MS / 2);
     t(() => setBoxFlipping('search', false), time + FLIP_MS);
     time += REVEAL_STAGGER_MS;
 
@@ -183,7 +191,7 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     const word1LettersEnd = time + (WORD1_INDICES.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
 
     t(() => setBoxFlipping('word', true), word1LettersEnd);
-    t(() => setBoxColor('word', 'blue'), word1LettersEnd + FLIP_MS / 2);
+    t(() => setBoxColor('word', 'grey'), word1LettersEnd + FLIP_MS / 2);
     t(() => setBoxFlipping('word', false), word1LettersEnd + FLIP_MS);
 
     time = word1LettersEnd + FLIP_MS + GAP_BETWEEN_WORDS_MS;
@@ -202,18 +210,24 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     const word2LettersEnd = time + (WORD2_INDICES.length - 1) * SOLVE_STAGGER_MS + FLIP_MS;
 
     t(() => setBoxFlipping('search', true), word2LettersEnd);
-    t(() => setBoxColor('search', 'blue'), word2LettersEnd + FLIP_MS / 2);
+    t(() => setBoxColor('search', 'grey'), word2LettersEnd + FLIP_MS / 2);
     t(() => setBoxFlipping('search', false), word2LettersEnd + FLIP_MS);
 
     // Closing flourish
     time = word2LettersEnd + FLIP_MS + SWIPE_HOLD_MS;
     const FLOURISH_STAGGER_MS = REVEAL_STAGGER_MS / 2;
+    const FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2; // keep the flourish's cell ripple proportionally faster too
 
     for (let row = 1; row <= ROWS; row++) {
-      const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
-      t(() => setCellsFlipping(rowIndices, true), time);
-      t(() => setCellsFlipping(rowIndices, false), time + FLIP_MS);
-      time += FLOURISH_STAGGER_MS;
+    const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
+
+    rowIndices.forEach((idx, i) => {
+        const start = time + i * FLOURISH_CELL_STAGGER_MS;
+        t(() => setCellsFlipping([idx], true), start);
+        t(() => setCellsFlipping([idx], false), start + FLIP_MS);
+    });
+
+    time += FLOURISH_STAGGER_MS;
     }
 
     t(() => setBoxFlipping('word', true), time);
@@ -237,11 +251,12 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     if (state.color === 'yellow') return 'bg-partial text-partial-foreground';
     return 'bg-key text-key-foreground';
   }
+
   function boxClass(state: BoxState) {
     if (!state.revealed) return 'border border-foreground/20 bg-background';
     if (state.color === 'blue') return 'bg-word-reveal text-word-reveal-foreground';
-    return 'bg-key text-key-foreground';
-  }
+    return 'bg-key text-key-foreground line-through';
+    }
 
   return (
     <div>

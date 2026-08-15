@@ -5,6 +5,12 @@ import type { SolveState } from './WordSearchBuilder';
 
 type HintState = { word: string; phonemeIndex: number; nonce: number } | null;
 
+interface IntroLetterState {
+  word: string;
+  revealed: boolean[];
+  flipping: boolean[];
+}
+
 type Props = {
   words: PhonemeWordEntry[];
   count: number;
@@ -14,10 +20,11 @@ type Props = {
   onHintClick: (entry: PhonemeWordEntry) => void;
   foundWords: Set<string>;
   solves: SolveState[];
-  wordPairRevealed: Set<string>;
-  wordPairFlippingWord: string | null;
+  englishRevealed: Set<string>;
+  englishFlippingWords: Set<string>;
   hintRevealed: Set<string>;
-  hintFlippingWord: string | null;
+  hintFlippingWords: Set<string>;
+  letterStates: IntroLetterState[];
 };
 
 const BOX_SIZE = 26;
@@ -25,31 +32,28 @@ const GAP = 4;
 const MAX_PHONEME_SLOTS = 5;
 const GROUP_GAP = GAP * 2;
 
-function Placeholder({ flipping }: { flipping: boolean }) {
-  return (
-    <div style={{ perspective: '400px' }}>
-      <div
-        className={`rounded-md border border-foreground/20 bg-background ${
-          flipping ? 'animate-tile-flip' : ''
-        }`}
-        style={{ width: BOX_SIZE, height: BOX_SIZE }}
-      />
-    </div>
-  );
+// Fully invisible placeholder — reserves the exact same footprint so
+// layout never shifts, but shows nothing at all until this box's own
+// turn to open arrives (per "hidden from view" requirement).
+function HiddenBox({ width = BOX_SIZE, height = BOX_SIZE }: { width?: number; height?: number }) {
+  return <div style={{ width, height }} />;
 }
 
 function HintBox({
   isFound,
   solve,
+  introFlipping,
   triggerId,
   onClick,
 }: {
   isFound: boolean;
   solve: SolveState | null;
+  introFlipping: boolean;
   triggerId: string | null;
   onClick: () => void;
 }) {
-  const { flipping } = useHintFlip(triggerId);
+  const { flipping: hintFlipping } = useHintFlip(triggerId);
+  const isFlipping = hintFlipping || introFlipping;
 
   if (isFound) {
     return (
@@ -88,7 +92,7 @@ function HintBox({
         onClick={onClick}
         title="Hint?"
         className={`flex items-center justify-center rounded-md bg-partial text-xs font-semibold text-partial-foreground hover:opacity-80 ${
-          flipping ? 'animate-tile-flip' : ''
+          isFlipping ? 'animate-tile-flip' : ''
         }`}
         style={{ width: BOX_SIZE, height: BOX_SIZE }}
       >
@@ -104,12 +108,14 @@ function PhonemeSlot({
   revealWords,
   isFound,
   solveInfo,
+  introFlipping,
 }: {
   symbol: string;
   triggerId: string | null;
   revealWords: boolean;
   isFound: boolean;
   solveInfo: { flipping: boolean; revealed: boolean } | null;
+  introFlipping: boolean;
 }) {
   const { flipping: hintFlipping, revealed: hintRevealed } = useHintFlip(triggerId);
 
@@ -128,16 +134,18 @@ function PhonemeSlot({
     colorClass = solveInfo.revealed ? 'bg-match text-match-foreground' : preColor;
     isFlipping = solveInfo.flipping;
     showSymbol = solveInfo.revealed || revealWords;
-    titleAttr = solveInfo.revealed ? getPhonemeHoverText(symbol) : undefined;
+    titleAttr = showSymbol ? getPhonemeHoverText(symbol) : undefined;
   } else {
     colorClass = hintRevealed
       ? 'bg-partial text-partial-foreground'
       : revealWords
       ? 'bg-key-used text-key-used-foreground'
       : 'bg-key text-key-foreground';
-    isFlipping = hintFlipping;
+    isFlipping = hintFlipping || introFlipping;
     showSymbol = hintRevealed || revealWords;
-    titleAttr = undefined;
+    // Hover text now works as soon as the symbol is actually visible in
+    // its revealed grey/dark-grey state — not just for found/solving cells.
+    titleAttr = showSymbol ? getPhonemeHoverText(symbol) : undefined;
   }
 
   return (
@@ -164,10 +172,11 @@ export default function WordSearchWordListPreview({
   onHintClick,
   foundWords,
   solves,
-  wordPairRevealed,
-  wordPairFlippingWord,
+  englishRevealed,
+  englishFlippingWords,
   hintRevealed,
-  hintFlippingWord,
+  hintFlippingWords,
+  letterStates,
 }: Props) {
   return (
     <div className="w-full">
@@ -182,37 +191,57 @@ export default function WordSearchWordListPreview({
           const solveForWord = entry ? solves.find((s) => s.word === entry.word) ?? null : null;
           const hintForThisWord = entry && hint && hint.word === entry.word ? hint : null;
 
-          // Word-pair reveal gate: applies to the phoneme boxes + English
-          // box together, regardless of whether the word was placed.
-          const pairRevealed = entry ? wordPairRevealed.has(entry.word) : false;
-          const pairFlipping = entry ? wordPairFlippingWord === entry.word : false;
+          const englishShown = entry
+            ? englishRevealed.has(entry.word) || englishFlippingWords.has(entry.word)
+            : false;
+          const englishFlippingNow = entry ? englishFlippingWords.has(entry.word) : false;
 
-          // Hint-box reveal gate: separate, later stage — only meaningful
-          // for placed words.
-          const hintBoxRevealed = entry && isPlaced ? hintRevealed.has(entry.word) : false;
-          const hintBoxFlipping = entry && isPlaced ? hintFlippingWord === entry.word : false;
+          const hintShown = entry && isPlaced ? hintRevealed.has(entry.word) || hintFlippingWords.has(entry.word) : false;
+          const hintFlippingNow = entry && isPlaced ? hintFlippingWords.has(entry.word) : false;
+
+          const letterState = entry ? letterStates.find((s) => s.word === entry.word) : undefined;
 
           return (
             <div key={groupIndex}>
               <div className="flex" style={{ gap: GAP }}>
-                {entry && isPlaced && hintBoxRevealed ? (
+                {!entry ? (
+                  <div
+                    className="rounded-md border border-foreground/20 bg-background"
+                    style={{ width: BOX_SIZE, height: BOX_SIZE }}
+                  />
+                ) : !isPlaced ? (
+                  <div
+                    className="rounded-md border border-foreground/20 bg-background"
+                    style={{ width: BOX_SIZE, height: BOX_SIZE }}
+                  />
+                ) : hintShown ? (
                   <HintBox
                     isFound={isFound}
                     solve={solveForWord}
+                    introFlipping={hintFlippingNow}
                     triggerId={hintForThisWord ? `${entry.word}-box-${hintForThisWord.nonce}` : null}
                     onClick={() => onHintClick(entry)}
                   />
                 ) : (
-                  <Placeholder flipping={hintBoxFlipping} />
+                  <HiddenBox />
                 )}
 
                 {Array.from({ length: MAX_PHONEME_SLOTS }).map((_, i) => {
                   if (entry && i >= entry.phonemes.length) return null;
                   const symbol = entry?.phonemes[i];
-                  if (!symbol) return <Placeholder key={i} flipping={false} />;
+                  if (!symbol) {
+                    return (
+                      <div
+                        key={i}
+                        className="rounded-md border border-foreground/20 bg-background"
+                        style={{ width: BOX_SIZE, height: BOX_SIZE }}
+                      />
+                    );
+                  }
 
-                  if (!pairRevealed) {
-                    return <Placeholder key={i} flipping={pairFlipping} />;
+                  const letterShown = letterState ? letterState.revealed[i] || letterState.flipping[i] : false;
+                  if (!letterShown) {
+                    return <HiddenBox key={i} />;
                   }
 
                   const triggerId =
@@ -222,6 +251,8 @@ export default function WordSearchWordListPreview({
                   const solveInfo = solveForWord
                     ? { flipping: solveForWord.letterFlipping[i], revealed: solveForWord.letterRevealed[i] }
                     : null;
+                  const introFlipping = letterState ? letterState.flipping[i] : false;
+
                   return (
                     <PhonemeSlot
                       key={i}
@@ -230,39 +261,42 @@ export default function WordSearchWordListPreview({
                       revealWords={revealWords}
                       isFound={isFound}
                       solveInfo={solveInfo}
+                      introFlipping={introFlipping}
                     />
                   );
                 })}
               </div>
 
               <div style={{ perspective: '400px' }} className="mt-1">
-                {!pairRevealed ? (
+                {!entry ? (
                   <div
-                    className={`rounded-md border border-foreground/20 bg-background ${
-                      pairFlipping ? 'animate-tile-flip' : ''
-                    }`}
+                    className="rounded-md border border-foreground/20 bg-background"
                     style={{
-                      width: entry ? englishWordWidth : 5 * BOX_SIZE + 4 * GAP,
+                      width: 5 * BOX_SIZE + 4 * GAP,
                       height: BOX_SIZE,
                       marginLeft: BOX_SIZE + GAP,
                     }}
                   />
+                ) : !englishShown ? (
+                  <div style={{ marginLeft: BOX_SIZE + GAP }}>
+                    <HiddenBox width={englishWordWidth} height={BOX_SIZE} />
+                  </div>
                 ) : (
                   <div
                     className={`flex items-center justify-center rounded-md ${
-                      entry
-                        ? isFound || solveForWord?.wordBoxRevealed
-                          ? 'bg-word-reveal px-2 font-semibold text-word-reveal-foreground'
-                          : 'bg-key px-2 font-semibold text-key-foreground'
-                        : 'border border-foreground/20 bg-background'
-                    } ${solveForWord?.wordBoxFlipping ? 'animate-tile-flip' : ''}`}
+                      isFound || solveForWord?.wordBoxRevealed
+                        ? 'bg-key px-2 font-semibold text-key-foreground line-through'
+                        : 'bg-word-reveal px-2 font-semibold text-word-reveal-foreground'
+                    } ${
+                      solveForWord?.wordBoxFlipping || englishFlippingNow ? 'animate-tile-flip' : ''
+                    }`}
                     style={{
-                      width: entry ? englishWordWidth : 5 * BOX_SIZE + 4 * GAP,
+                      width: englishWordWidth,
                       height: BOX_SIZE,
                       marginLeft: BOX_SIZE + GAP,
                     }}
                   >
-                    {entry?.word ?? ''}
+                    {entry.word}
                   </div>
                 )}
               </div>

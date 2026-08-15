@@ -15,10 +15,19 @@ const MIN_CELL_SIZE = 24;
 const MIN_GAP = 4;
 const LEFT_COL_WIDTH = 176;
 const ROW_GAP = 24;
+const COMPLETION_CELL_STAGGER_MS = 15;
+const COMPLETION_ROW_STAGGER_MS = 80;
+const COMPLETION_FLIP_MS = 500;
 
 type HintState = { word: string; phonemeIndex: number; nonce: number } | null;
 type Cell = { row: number; col: number };
 type SolveCellInfo = { flipping: boolean; revealed: boolean } | null;
+
+interface IntroLetterState {
+  word: string;
+  revealed: boolean[];
+  flipping: boolean[];
+}
 
 type Props = {
   gridSize: number;
@@ -34,12 +43,14 @@ type Props = {
   foundWords: Set<string>;
   solves: SolveState[];
   onWordMatched: (word: string) => void;
-  gridRowFlip: { revealed: boolean; flipping: boolean }[];
-  wordPairRevealed: Set<string>;
-  wordPairFlippingWord: string | null;
+  gridCellFlip: { revealed: boolean; flipping: boolean }[][];
+  englishRevealed: Set<string>;
+  englishFlippingWords: Set<string>;
   hintRevealed: Set<string>;
-  hintFlippingWord: string | null;
+  hintFlippingWords: Set<string>;
+  letterStates: IntroLetterState[];
   isPlayable: boolean;
+  completionFlipSignal: number;
   isDarkTheme: boolean;
   isHighContrast: boolean;
 };
@@ -74,6 +85,9 @@ function GridCellView({
   isFoundCell,
   solveInfo,
   cellSize,
+  introRevealed,
+  introFlipping,
+  completionFlipping,
   onMouseDown,
   onMouseEnter,
 }: {
@@ -86,11 +100,27 @@ function GridCellView({
   isFoundCell: boolean;
   solveInfo: SolveCellInfo;
   cellSize: number;
+  introRevealed: boolean;
+  introFlipping: boolean;
+  completionFlipping: boolean;
   onMouseDown: () => void;
   onMouseEnter: () => void;
 }) {
   const { flipping: hintFlipping, revealed: hintRevealed } = useHintFlip(hintTriggerId);
   const { flipping: selFlipping, highlighted: selHighlighted } = useSelectionReleaseFlip(releaseToken);
+
+  if (!introRevealed) {
+    return (
+      <div style={{ perspective: '400px' }}>
+        <div
+          className={`flex items-center justify-center rounded-md border-2 border-foreground/20 bg-background ${
+            introFlipping ? 'animate-tile-flip' : ''
+          }`}
+          style={{ width: cellSize, height: cellSize }}
+        />
+      </div>
+    );
+  }
 
   let baseColorClass: string;
   let baseFlipping: boolean;
@@ -120,6 +150,13 @@ function GridCellView({
     isFlipping = selFlipping;
   } else if (selFlipping) {
     colorClass = baseColorClass;
+    isFlipping = true;
+  }
+
+  // Completion flourish overrides only the flip flag, never the color —
+  // every cell keeps whatever it already looked like (solved green, or
+  // grey/dark-grey filler) through this closing flip.
+  if (completionFlipping) {
     isFlipping = true;
   }
 
@@ -155,12 +192,14 @@ export default function WordSearchGrid({
   foundWords,
   solves,
   onWordMatched,
-  gridRowFlip,
-  wordPairRevealed,
-  wordPairFlippingWord,
+  gridCellFlip,
+  englishRevealed,
+  englishFlippingWords,
   hintRevealed,
-  hintFlippingWord,
+  hintFlippingWords,
+  letterStates,
   isPlayable,
+  completionFlipSignal,
   isDarkTheme,
   isHighContrast,
 }: Props) {
@@ -208,6 +247,39 @@ export default function WordSearchGrid({
   const dragPathRef = useRef<Cell[]>([]);
   const isDraggingRef = useRef(false);
   const releaseCounter = useRef(0);
+
+  // --- completion flourish ---
+  const [completionFlipping, setCompletionFlipping] = useState<Set<string>>(new Set());
+  const completionTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => {
+    if (completionFlipSignal === 0) return;
+
+    completionTimersRef.current.forEach(clearTimeout);
+    completionTimersRef.current = [];
+
+    for (let row = 0; row < gridSize; row++) {
+      const rowStart = row * COMPLETION_ROW_STAGGER_MS;
+      for (let col = 0; col < gridSize; col++) {
+        const key = `${row},${col}`;
+        const start = rowStart + col * COMPLETION_CELL_STAGGER_MS;
+        completionTimersRef.current.push(
+          setTimeout(() => {
+            setCompletionFlipping((prev) => new Set(prev).add(key));
+          }, start),
+          setTimeout(() => {
+            setCompletionFlipping((prev) => {
+              const next = new Set(prev);
+              next.delete(key);
+              return next;
+            });
+          }, start + COMPLETION_FLIP_MS)
+        );
+      }
+    }
+
+    return () => completionTimersRef.current.forEach(clearTimeout);
+  }, [completionFlipSignal, gridSize]);
 
   useEffect(() => {
     dragPathRef.current = dragPath;
@@ -276,10 +348,11 @@ export default function WordSearchGrid({
         onHintClick={onHintClick}
         foundWords={foundWords}
         solves={solves}
-        wordPairRevealed={wordPairRevealed}
-        wordPairFlippingWord={wordPairFlippingWord}
+        englishRevealed={englishRevealed}
+        englishFlippingWords={englishFlippingWords}
         hintRevealed={hintRevealed}
-        hintFlippingWord={hintFlippingWord}
+        hintFlippingWords={hintFlippingWords}
+        letterStates={letterStates}
       />
     </div>
   );
@@ -306,27 +379,20 @@ export default function WordSearchGrid({
             const gridIsValidSize =
               placedGrid && placedGrid.length === gridSize && placedGrid[row]?.length === gridSize;
 
-            const rowFlipInfo = gridRowFlip[row];
-            const rowIsSizedCorrectly = gridRowFlip.length === gridSize;
-            const rowRevealed = gridIsValidSize && rowIsSizedCorrectly && rowFlipInfo?.revealed;
-
-            // Not built, or this row hasn't been intro-revealed yet —
-            // plain bordered placeholder, with a flip animation if this
-            // row is the one currently mid-reveal. No symbol, no hover
-            // text, until the row genuinely becomes revealed.
-            if (!gridIsValidSize || !rowRevealed) {
-              const flipping = gridIsValidSize && rowIsSizedCorrectly && rowFlipInfo?.flipping;
+            if (!gridIsValidSize) {
               return (
                 <div key={i} style={{ perspective: '400px' }}>
                   <div
-                    className={`flex items-center justify-center rounded-md border-2 border-foreground/20 bg-background ${
-                      flipping ? 'animate-tile-flip' : ''
-                    }`}
-                    style={{ width: cellSize, height: cellSize, fontSize: Math.max(10, cellSize * 0.4) }}
+                    className="flex items-center justify-center rounded-md border-2 border-foreground/20 bg-background"
+                    style={{ width: cellSize, height: cellSize }}
                   />
                 </div>
               );
             }
+
+            const cellFlipInfo = gridCellFlip[row]?.[col];
+            const introRevealed = Boolean(cellFlipInfo?.revealed);
+            const introFlipping = Boolean(cellFlipInfo?.flipping);
 
             const key = `${row},${col}`;
             const symbol = placedGrid![row][col];
@@ -346,6 +412,7 @@ export default function WordSearchGrid({
               ? dragPath.some((c) => c.row === row && c.col === col)
               : hoverKey === key;
             const releaseToken = releaseInfo && releaseInfo.cells.has(key) ? releaseInfo.token : null;
+            const isCompletionFlipping = completionFlipping.has(key);
 
             return (
               <GridCellView
@@ -359,6 +426,9 @@ export default function WordSearchGrid({
                 isFoundCell={isFoundCell}
                 solveInfo={solveInfo}
                 cellSize={cellSize}
+                introRevealed={introRevealed}
+                introFlipping={introFlipping}
+                completionFlipping={isCompletionFlipping}
                 onMouseDown={() => handleCellMouseDown(row, col)}
                 onMouseEnter={() => handleCellMouseEnter(row, col)}
               />

@@ -600,9 +600,25 @@ export default function WordSearchBuilder() {
   return (
     <div className="space-y-8">
       <div className="rounded-md border border-foreground/10 bg-background p-4 text-sm text-foreground/80">
-        <p>
-          Configure a phoneme-based Word Search activity below. Search the word list using
-          the phoneme keypad and add words to your selection. [Dummy instructions — replace with final copy.]
+        <p className="mb-3">
+          Create a classic <strong className="text-foreground">Word Search</strong> game, where students
+          need to find the phonetic equivalent of English words inside a puzzle grid of phonemes.
+        </p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>Choose the grid size for the first puzzle</li>
+          <li>Choose enough words for that grid (or choose random words!)</li>
+          <li>Randomise the order the puzzle words will display</li>
+          <li>Click the button to Build Puzzle</li>
+          <li>
+            <strong className="text-foreground">Play the preview!</strong>
+          </li>
+          <li>
+            Generate a <strong className="text-foreground">standalone playable .html</strong> file.
+          </li>
+        </ol>
+        <p className="mt-3">
+          <strong className="text-foreground">NOTE:</strong> After they play the first puzzle, they can
+          generate an endless number of random puzzles to play next, which utilises the entire word list!
         </p>
       </div>
 

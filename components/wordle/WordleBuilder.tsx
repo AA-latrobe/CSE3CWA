@@ -292,11 +292,21 @@ export default function WordleBuilder() {
   return (
     <div className="space-y-8">
       <div className="rounded-md border border-foreground/10 bg-background p-4 text-sm text-foreground/80">
-        <p>
-          Configure a phoneme-based Wordle activity below. Search the word list using
-          the phoneme keypad, add words to your selection, then preview the activity.
-          [Dummy instructions — replace with final copy.]
+        <p className="mb-3">
+          Create a <strong className="text-foreground">Wordle</strong>-style game, where students need to
+          guess a word spelled in phonemes.
         </p>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li>Choose some words (or choose them all!)</li>
+          <li>Set the allowed number of guesses</li>
+          <li>Randomise the the playing order</li>
+          <li>
+            <strong className="text-foreground">Play the preview!</strong>
+          </li>
+          <li>
+            Generate a <strong className="text-foreground">standalone playable .html</strong> file.
+          </li>
+        </ol>
       </div>
 
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">

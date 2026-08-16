@@ -60,7 +60,12 @@ export default function Home() {
         )}
         {activeView === 'wordle' && <WordleBuilder />}
         {activeView === 'wordsearch' && <WordSearchBuilder />}
-        {activeView === 'about' && <AboutPage />}
+        {activeView === 'about' && (
+          <AboutPage
+            onNavigateToWordle={() => setActiveView('wordle')}
+            onNavigateToWordSearch={() => setActiveView('wordsearch')}
+          />
+        )}
         {activeView === 'settings' && <SettingsPanel />}
       </main>
 

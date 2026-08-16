@@ -51,7 +51,13 @@ export default function Home() {
       </div>
 
       <main className="flex-1 px-4 py-6 sm:px-6">
-        {activeView === 'home' && <HomePage />}
+        {activeView === 'home' && (
+          <HomePage
+            onNavigateToAbout={() => setActiveView('about')}
+            onNavigateToWordle={() => setActiveView('wordle')}
+            onNavigateToWordSearch={() => setActiveView('wordsearch')}
+          />
+        )}
         {activeView === 'wordle' && <WordleBuilder />}
         {activeView === 'wordsearch' && <WordSearchBuilder />}
         {activeView === 'about' && <AboutPage />}

@@ -59,13 +59,20 @@ export default function WordSearchBuilder() {
   const [selectedWords, setSelectedWords] = useState<PhonemeWordEntry[]>(initial.selectedWords);
   const [gridSize, setGridSize] = useState(initial.gridSize);
   const [scrollY, setScrollY] = useState(initial.scrollY);
-  const [placedGrid, setPlacedGrid] = useState<(string | null)[][] | null>(null);
-  const [placedWords, setPlacedWords] = useState<PlacedWord[]>([]);
-  const [revealWords, setRevealWords] = useState(false);
+  const [placedGrid, setPlacedGrid] = useState<(string | null)[][] | null>(initial.placedGrid);
+  const [placedWords, setPlacedWords] = useState<PlacedWord[]>(initial.placedWords);
+  const [revealWords, setRevealWords] = useState(initial.revealWords);
   const [hint, setHint] = useState<HintState | null>(null);
-  const [foundWords, setFoundWords] = useState<Set<string>>(new Set());
+  const [foundWords, setFoundWords] = useState<Set<string>>(new Set(initial.foundWords));
   const [solves, setSolves] = useState<SolveState[]>([]);
   const [titleSignal, setTitleSignal] = useState(0);
+
+  // Set once at mount: true only if there's a genuinely restored puzzle
+  // to resume. Consumed (flipped to false) the first time the title demo
+  // finishes — after that, every subsequent Build/Rebuild/Start New
+  // Puzzle goes through the normal animated intro as usual.
+  const pendingRestoreRef = useRef(Boolean(initial.placedGrid));
+  const hasMountedRef = useRef(false);
 
   // --- intro reveal sequence state ---
   const [gridCellFlip, setGridCellFlip] = useState<{ revealed: boolean; flipping: boolean }[][]>([]);
@@ -125,7 +132,8 @@ export default function WordSearchBuilder() {
   };
 
   // Fires the completion flourish exactly once per puzzle, the moment
-  // the last word gets found.
+  // the last word gets found (or, on a restore of an already-completed
+  // puzzle, once isPlayable first becomes true after the title demo).
   useEffect(() => {
     if (isPuzzleComplete && !hasTriggeredCompletionRef.current) {
       hasTriggeredCompletionRef.current = true;
@@ -167,6 +175,31 @@ export default function WordSearchBuilder() {
     setIsPlayable(false);
     hasTriggeredCompletionRef.current = false;
     setCompletionFlipSignal(0);
+  };
+
+  // Skips the staged reveal entirely — used only when resuming a puzzle
+  // restored from cookies, so navigating back to this tab doesn't replay
+  // the whole grid/word-list animation every time. Jumps straight to
+  // "fully revealed and playable."
+  const applyRestoredState = (size: number, words: PhonemeWordEntry[]) => {
+    clearIntroTimers();
+    setGridCellFlip(
+      Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => ({ revealed: true, flipping: false }))
+      )
+    );
+    setEnglishRevealed(new Set(words.map((w) => w.word)));
+    setEnglishFlippingWords(new Set());
+    setHintRevealed(new Set(words.filter((w) => wordPhonemeCells[w.word]).map((w) => w.word)));
+    setHintFlippingWords(new Set());
+    setLetterStates(
+      words.map((w) => ({
+        word: w.word,
+        revealed: Array(w.phonemes.length).fill(true),
+        flipping: Array(w.phonemes.length).fill(false),
+      }))
+    );
+    setIsPlayable(true);
   };
 
   // Orchestrates the post-title reveal: grid rows (cells within a row
@@ -306,9 +339,8 @@ export default function WordSearchBuilder() {
   };
 
   const handleTitleComplete = () => {
-    if (placedGrid) {
-      startIntroSequence();
-    }
+    if (!placedGrid) return;
+    startIntroSequence();
   };
 
   const handleHintClick = (entry: PhonemeWordEntry) => {
@@ -431,14 +463,12 @@ export default function WordSearchBuilder() {
     setSelectedWords(words.slice(0, targetWordCount));
   };
 
-  const isFirstGridSizeEffect = useRef(true);
-  useEffect(() => {
-    if (isFirstGridSizeEffect.current) {
-      isFirstGridSizeEffect.current = false;
-      return;
-    }
-    setSelectedWords([]);
-  }, [gridSize]);
+  const prevGridSizeRef = useRef(gridSize);
+    useEffect(() => {
+      if (prevGridSizeRef.current === gridSize) return;
+      prevGridSizeRef.current = gridSize;
+      setSelectedWords([]);
+    }, [gridSize]);
 
   const prevWordSetRef = useRef<string>(
     [...selectedWords.map((w) => w.word)].sort().join(',')
@@ -447,6 +477,9 @@ export default function WordSearchBuilder() {
     const currentWordSet = [...selectedWords.map((w) => w.word)].sort().join(',');
     if (currentWordSet === prevWordSetRef.current) return;
     prevWordSetRef.current = currentWordSet;
+    // A genuine word-set change invalidates any pending restore — treat
+    // it the same as a fresh Build Puzzle from here on.
+    pendingRestoreRef.current = false;
     setPlacedGrid(null);
     setPlacedWords([]);
     setHint(null);
@@ -475,6 +508,7 @@ export default function WordSearchBuilder() {
 
   const handleBuildPuzzle = () => {
     if (selectedWords.length !== targetWordCount) return;
+    pendingRestoreRef.current = false;
     const result = generateWordSearchGrid(selectedWords, gridSize);
     setPlacedGrid(result.grid);
     setPlacedWords(result.placedWords);
@@ -491,6 +525,14 @@ export default function WordSearchBuilder() {
   };
 
   useEffect(() => {
+    if (hasMountedRef.current) return; // Strict Mode's phantom second invocation — no-op
+    hasMountedRef.current = true;
+
+    if (pendingRestoreRef.current) {
+      pendingRestoreRef.current = false;
+      applyRestoredState(gridSize, selectedWords);
+      return;
+    }
     setTitleSignal((n) => n + 1);
   }, []);
 
@@ -534,8 +576,16 @@ export default function WordSearchBuilder() {
   }, []);
 
   useEffect(() => {
-    saveWordSearchState({ selectedWords, gridSize, scrollY });
-  }, [selectedWords, gridSize, scrollY]);
+    saveWordSearchState({
+      selectedWords,
+      gridSize,
+      scrollY,
+      revealWords,
+      placedGrid,
+      placedWords,
+      foundWords: Array.from(foundWords),
+    });
+  }, [selectedWords, gridSize, scrollY, revealWords, placedGrid, placedWords, foundWords]);
 
   useEffect(() => {
     return () => {
@@ -603,7 +653,12 @@ export default function WordSearchBuilder() {
           </div>
         </div>
 
-        <WordSearchTitle resetSignal={titleSignal} isPlayable={gridIsPlayable} onComplete={handleTitleComplete} />
+        <WordSearchTitle
+          resetSignal={titleSignal}
+          isPlayable={gridIsPlayable}
+          skipAnimation={pendingRestoreRef.current}
+          onComplete={handleTitleComplete}
+        />
 
         <WordSearchGrid
           gridSize={gridSize}

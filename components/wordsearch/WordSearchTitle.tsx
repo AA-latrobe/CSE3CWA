@@ -83,6 +83,7 @@ function emptyBoxState(): BoxState {
 type Props = {
   resetSignal: number;
   isPlayable: boolean;
+  skipAnimation?: boolean;
   onComplete?: () => void;
 };
 
@@ -112,7 +113,7 @@ function ReferenceKeypadGrid({ grid, keyPrefix }: { grid: string[][]; keyPrefix:
   );
 }
 
-export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }: Props) {
+export default function WordSearchTitle({ resetSignal, isPlayable, skipAnimation, onComplete }: Props) {
   const { ref: rowRef, isWide: rowWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
 
   const symbolsRef = useRef<string[]>([]);
@@ -132,6 +133,22 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
 
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  // Kept fresh every render, but read only at the moment the main effect
+  // fires — NOT a dependency of that effect, and not relied upon by the
+  // isPlayable-watching effect either (see isRestoringRef below), since
+  // the parent deliberately flips this prop back to false shortly after
+  // mount, once its own restore logic has consumed it.
+  const skipAnimationRef = useRef(skipAnimation);
+  skipAnimationRef.current = skipAnimation;
+
+  // Captures "was this run a restore" exactly once, at the moment the
+  // main effect actually executes (i.e. once per genuine resetSignal
+  // change) — stays stable afterward regardless of skipAnimation
+  // drifting back to false on a later render. This is what the
+  // isPlayable-watching effect checks, so it can't be fooled by that
+  // drift into playing the hint-indicator flip after a restore.
+  const isRestoringRef = useRef(false);
 
   const word1Segments = useMemo(
     () =>
@@ -172,6 +189,33 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
 
     timers.current.forEach(clearTimeout);
     timers.current = [];
+
+    isRestoringRef.current = Boolean(skipAnimationRef.current);
+
+    // Restoring an already-built puzzle: skip the whole demo entirely —
+    // jump straight to its final static appearance with no timers, no
+    // flips, and deliberately no onComplete call. The parent already
+    // applies its own restored state independently, so calling onComplete
+    // here would just race with (and re-trigger) that logic.
+    if (skipAnimationRef.current) {
+      const solvedIndices = new Set([...WORD1_INDICES, ...WORD2_INDICES]);
+      setCellStates(
+        Array.from({ length: ROWS * COLS }, (_, i) => ({
+          revealed: true,
+          flipping: false,
+          color: solvedIndices.has(i) ? 'green' : 'grey',
+        }))
+      );
+      setWordBox({ revealed: true, flipping: false, color: 'grey' });
+      setSearchBox({ revealed: true, flipping: false, color: 'grey' });
+      setWord1ConnectedCount(word1Segments.length);
+      setWord2ConnectedCount(word2Segments.length);
+      setHintIndicatorRevealed(isPlayable);
+      setHintIndicatorFlipping(false);
+      prevIsPlayableRef.current = isPlayable;
+      return;
+    }
+
     setCellStates(Array.from({ length: ROWS * COLS }, emptyCellState));
     setWordBox(emptyBoxState());
     setSearchBox(emptyBoxState());
@@ -342,6 +386,13 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
   useEffect(() => {
     if (isPlayable && !prevIsPlayableRef.current) {
       prevIsPlayableRef.current = true;
+
+      if (isRestoringRef.current) {
+        setHintIndicatorRevealed(true);
+        setHintIndicatorFlipping(false);
+        return;
+      }
+
       hintIndicatorTimers.current.forEach(clearTimeout);
       hintIndicatorTimers.current = [];
       setHintIndicatorFlipping(true);

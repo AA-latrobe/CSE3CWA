@@ -84,7 +84,7 @@ export function getInitialWordleState(): WordleGameState {
   return (
     loadWordleState() ?? {
       selectedWords: [DEFAULT_SELECTED_ENTRY],
-      numGuesses: 6,
+      numGuesses: 10,
       currentWordIndex: 0,
       solvedCount: 0,
       failedCount: 0,

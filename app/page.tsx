@@ -4,6 +4,8 @@ import Header from '@/components/Header';
 import NavBar from '@/components/NavBar';
 import HamburgerMenu from '@/components/HamburgerMenu';
 import Footer from '@/components/Footer';
+import HomePage from '@/components/HomePage';
+import AboutPage from '@/components/AboutPage';
 import WordleBuilder from '@/components/wordle/WordleBuilder';
 import WordSearchBuilder from '@/components/wordsearch/WordSearchBuilder';
 import SettingsPanel from '@/components/SettingsPanel';
@@ -49,17 +51,10 @@ export default function Home() {
       </div>
 
       <main className="flex-1 px-4 py-6 sm:px-6">
-        {activeView === 'home' && (
-          <div className="text-foreground">
-            <h2 className="mb-2 text-lg font-semibold">Welcome</h2>
-            <p className="text-sm text-foreground/70">
-              [Dummy home page — replace with real landing content.]
-            </p>
-          </div>
-        )}
+        {activeView === 'home' && <HomePage />}
         {activeView === 'wordle' && <WordleBuilder />}
         {activeView === 'wordsearch' && <WordSearchBuilder />}
-        {activeView === 'about' && <div>About placeholder</div>}
+        {activeView === 'about' && <AboutPage />}
         {activeView === 'settings' && <SettingsPanel />}
       </main>
 

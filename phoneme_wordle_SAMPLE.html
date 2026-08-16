@@ -1,33 +1,4 @@
-import { PhonemeWordEntry, KEYPAD_LEFT, KEYPAD_RIGHT, PREVIEW_TITLE_PHONEMES } from './phonemeData';
-
-function formatTimestamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(
-    d.getMinutes()
-  )}${pad(d.getSeconds())}`;
-}
-
-export function downloadStandaloneWordleHtml(words: PhonemeWordEntry[], numGuesses: number) {
-  const html = generateStandaloneWordleHtml(words, numGuesses);
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `phoneme_wordle_${formatTimestamp()}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function generateStandaloneWordleHtml(words: PhonemeWordEntry[], numGuesses: number): string {
-  const wordDataJson = JSON.stringify(words);
-  const keypadLeftJson = JSON.stringify(KEYPAD_LEFT);
-  const keypadRightJson = JSON.stringify(KEYPAD_RIGHT);
-  const titlePhonemesJson = JSON.stringify(PREVIEW_TITLE_PHONEMES);
-
-  return `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -242,13 +213,13 @@ input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
 
 <script>
 (function () {
-  var WORD_DATA = ${wordDataJson};
-  var NUM_GUESSES = ${numGuesses};
-  var KEYPAD_LEFT = ${keypadLeftJson};
-  var KEYPAD_RIGHT = ${keypadRightJson};
+  var WORD_DATA = [{"word":"brisk","phonemes":["b","ɹ","ɪ","s","k"]},{"word":"bed","phonemes":["b","e","d"]},{"word":"cleft","phonemes":["k","l","e","f","t"]},{"word":"pond","phonemes":["p","ɔ","n","d"]},{"word":"twist","phonemes":["t","w","ɪ","s","t"]},{"word":"sprig","phonemes":["s","p","ɹ","ɪ","ɡ"]},{"word":"jump","phonemes":["dʒ","ɐ","m","p"]},{"word":"splash","phonemes":["s","p","l","æ","ʃ"]},{"word":"boot","phonemes":["b","ʉː","t"]},{"word":"thin","phonemes":["θ","ɪ","n"]},{"word":"crab","phonemes":["k","ɹ","æ","b"]},{"word":"train","phonemes":["t","ɹ","æɪ","n"]},{"word":"scream","phonemes":["s","k","ɹ","iː","m"]},{"word":"ship","phonemes":["ʃ","ɪ","p"]},{"word":"golf","phonemes":["ɡ","ɔ","l","f"]},{"word":"left","phonemes":["l","e","f","t"]},{"word":"bud","phonemes":["b","ɐ","d"]},{"word":"bark","phonemes":["b","ɐː","k"]},{"word":"great","phonemes":["g","ɹ","æɪ","t"]},{"word":"bid","phonemes":["b","ɪ","d"]},{"word":"clasp","phonemes":["k","l","ɐː","s","p"]},{"word":"stop","phonemes":["s","t","ɔ","p"]},{"word":"chin","phonemes":["tʃ","ɪ","n"]},{"word":"stamp","phonemes":["s","t","æ","m","p"]},{"word":"lamp","phonemes":["l","æ","m","p"]},{"word":"yes","phonemes":["j","e","s"]},{"word":"sun","phonemes":["s","ɐ","n"]},{"word":"plug","phonemes":["p","l","ɐ","ɡ"]},{"word":"bad","phonemes":["b","æ","d"]},{"word":"van","phonemes":["v","æ","n"]},{"word":"glint","phonemes":["ɡ","l","ɪ","n","t"]},{"word":"scribe","phonemes":["s","k","ɹ","ɑe","b"]},{"word":"strap","phonemes":["s","t","ɹ","æ","p"]},{"word":"cold","phonemes":["k","əʉ","l","d"]},{"word":"fan","phonemes":["f","æ","n"]},{"word":"jam","phonemes":["dʒ","æ","m"]},{"word":"log","phonemes":["l","ɔ","ɡ"]},{"word":"gift","phonemes":["ɡ","ɪ","f","t"]},{"word":"flask","phonemes":["f","l","ɐː","s","k"]},{"word":"frog","phonemes":["f","ɹ","ɔ","ɡ"]},{"word":"wind","phonemes":["w","ɪ","n","d"]},{"word":"bike","phonemes":["b","ɑe","k"]},{"word":"strain","phonemes":["s","t","ɹ","æɪ","n"]},{"word":"bait","phonemes":["b","æɪ","t"]},{"word":"fork","phonemes":["f","oː","k"]},{"word":"bird","phonemes":["b","ɜː","d"]},{"word":"quiz","phonemes":["k","w","ɪ","z"]},{"word":"zip","phonemes":["z","ɪ","p"]},{"word":"sprout","phonemes":["s","p","ɹ","æɔ","t"]},{"word":"bank","phonemes":["b","æ","ŋ","k"]},{"word":"street","phonemes":["s","t","ɹ","iː","t"]},{"word":"blend","phonemes":["b","l","e","n","d"]},{"word":"clamp","phonemes":["k","l","æ","m","p"]},{"word":"desk","phonemes":["d","e","s","k"]},{"word":"tent","phonemes":["t","e","n","t"]},{"word":"smile","phonemes":["s","m","ɑe","l"]},{"word":"scrawl","phonemes":["s","k","ɹ","oː","l"]},{"word":"cloud","phonemes":["k","l","æɔ","d"]},{"word":"choice","phonemes":["tʃ","oɪ","s"]},{"word":"frame","phonemes":["f","ɹ","æɪ","m"]},{"word":"book","phonemes":["b","ʊ","k"]},{"word":"spring","phonemes":["s","p","ɹ","ɪ","ŋ"]},{"word":"drink","phonemes":["d","ɹ","ɪ","ŋ","k"]},{"word":"slip","phonemes":["s","l","ɪ","p"]},{"word":"boat","phonemes":["b","əʉ","t"]},{"word":"thrust","phonemes":["θ","ɹ","ɐ","s","t"]},{"word":"grand","phonemes":["ɡ","ɹ","æ","n","d"]},{"word":"smoked","phonemes":["s","m","əʉ","k","t"]},{"word":"hand","phonemes":["h","æ","n","d"]},{"word":"grin","phonemes":["ɡ","ɹ","ɪ","n"]},{"word":"scrub","phonemes":["s","k","ɹ","ɐ","b"]},{"word":"soft","phonemes":["s","ɔ","f","t"]},{"word":"boil","phonemes":["b","oɪ","l"]},{"word":"sprawl","phonemes":["s","p","ɹ","oː","l"]},{"word":"plant","phonemes":["p","l","æ","n","t"]},{"word":"milk","phonemes":["m","ɪ","l","k"]},{"word":"beard","phonemes":["b","ɪə","d"]},{"word":"silk","phonemes":["s","ɪ","l","k"]},{"word":"ring","phonemes":["ɹ","ɪ","ŋ"]},{"word":"drum","phonemes":["d","ɹ","ɐ","m"]},{"word":"shrimp","phonemes":["ʃ","ɹ","ɪ","m","p"]},{"word":"blank","phonemes":["b","l","æ","ŋ","k"]},{"word":"gum","phonemes":["ɡ","ɐ","m"]},{"word":"trust","phonemes":["t","ɹ","ɐ","s","t"]},{"word":"win","phonemes":["w","ɪ","n"]},{"word":"then","phonemes":["ð","e","n"]},{"word":"snake","phonemes":["s","n","æɪ","k"]},{"word":"hat","phonemes":["h","æ","t"]},{"word":"scrap","phonemes":["s","k","ɹ","æ","p"]},{"word":"clap","phonemes":["k","l","æ","p"]}];
+  var NUM_GUESSES = 10;
+  var KEYPAD_LEFT = [["p","t","k",""],["b","d","g",""],["n","m","ŋ",""],["f","s","θ","ʃ"],["v","z","ð","ʒ"],["l","ɹ","w","j"],["h","tʃ","dʒ",""]];
+  var KEYPAD_RIGHT = [["iː","ɪ","e","eː"],["æ","ɐ","ɐː","ɜː"],["ʉː","ɔ","oː","ʊ"],["æɪ","ɑe","oɪ","əʉ"],["æɔ","ɪə","","ə"]];
   var KEYPAD_RIGHT_TOP = KEYPAD_RIGHT.slice(0, 3);
   var KEYPAD_RIGHT_BOTTOM = KEYPAD_RIGHT.slice(3);
-  var TITLE_PHONEMES = ${titlePhonemesJson};
+  var TITLE_PHONEMES = ["w","ɜː","d","ə","l"];
   var FLIP_MS = 500, STAGGER_MS = 150;
   var POST_REVEAL_HOLD_MS = 1000; // extra pause before Play Next Word/Start Over re-enables
   var PHONEME_EXAMPLES = {
@@ -666,5 +637,4 @@ input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
 })();
 </script>
 </body>
-</html>`;
-}
+</html>

@@ -1,39 +1,4 @@
-import { PhonemeWordEntry, KEYPAD_LEFT, KEYPAD_RIGHT, WORD_LIST } from './phonemeData';
-import { GREAT_WORD_POSITIONS, GRID_SIZE_WORD_COUNTS } from './wordSearchData';
-
-function formatTimestamp(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(
-    d.getMinutes()
-  )}${pad(d.getSeconds())}`;
-}
-
-export function downloadStandaloneWordSearchHtml(words: PhonemeWordEntry[], gridSize: number) {
-  const html = generateStandaloneWordSearchHtml(words, gridSize);
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `word_search_${formatTimestamp()}.html`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function generateStandaloneWordSearchHtml(words: PhonemeWordEntry[], gridSize: number): string {
-  const wordDataJson = JSON.stringify(words);
-  const masterWordListJson = JSON.stringify(WORD_LIST);
-  const keypadLeftJson = JSON.stringify(KEYPAD_LEFT);
-  const keypadRightJson = JSON.stringify(KEYPAD_RIGHT);
-  const greatEntry = WORD_LIST.find((w) => w.word === 'great');
-  const greatPhonemesJson = JSON.stringify(greatEntry ? greatEntry.phonemes : []);
-  const greatPositionsJson = JSON.stringify(GREAT_WORD_POSITIONS);
-  const wordCountsJson = JSON.stringify(GRID_SIZE_WORD_COUNTS);
-  const gridSizeOptionsJson = JSON.stringify(Object.keys(GRID_SIZE_WORD_COUNTS).map(Number));
-
-  return `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -281,17 +246,17 @@ input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
 
 <script>
 (function () {
-  var INITIAL_WORD_DATA = ${wordDataJson};
-  var INITIAL_GRID_SIZE = ${gridSize};
-  var MASTER_WORD_LIST = ${masterWordListJson};
-  var GRID_SIZE_WORD_COUNTS = ${wordCountsJson};
-  var GRID_SIZE_OPTIONS = ${gridSizeOptionsJson};
-  var KEYPAD_LEFT = ${keypadLeftJson};
-  var KEYPAD_RIGHT = ${keypadRightJson};
+  var INITIAL_WORD_DATA = [{"word":"grand","phonemes":["ɡ","ɹ","æ","n","d"]},{"word":"bud","phonemes":["b","ɐ","d"]},{"word":"desk","phonemes":["d","e","s","k"]},{"word":"flask","phonemes":["f","l","ɐː","s","k"]},{"word":"then","phonemes":["ð","e","n"]},{"word":"crab","phonemes":["k","ɹ","æ","b"]}];
+  var INITIAL_GRID_SIZE = 8;
+  var MASTER_WORD_LIST = [{"word":"bad","phonemes":["b","æ","d"]},{"word":"bait","phonemes":["b","æɪ","t"]},{"word":"bank","phonemes":["b","æ","ŋ","k"]},{"word":"bark","phonemes":["b","ɐː","k"]},{"word":"beard","phonemes":["b","ɪə","d"]},{"word":"bed","phonemes":["b","e","d"]},{"word":"bid","phonemes":["b","ɪ","d"]},{"word":"bike","phonemes":["b","ɑe","k"]},{"word":"bird","phonemes":["b","ɜː","d"]},{"word":"blank","phonemes":["b","l","æ","ŋ","k"]},{"word":"blend","phonemes":["b","l","e","n","d"]},{"word":"boat","phonemes":["b","əʉ","t"]},{"word":"boil","phonemes":["b","oɪ","l"]},{"word":"book","phonemes":["b","ʊ","k"]},{"word":"boot","phonemes":["b","ʉː","t"]},{"word":"brisk","phonemes":["b","ɹ","ɪ","s","k"]},{"word":"bud","phonemes":["b","ɐ","d"]},{"word":"chin","phonemes":["tʃ","ɪ","n"]},{"word":"choice","phonemes":["tʃ","oɪ","s"]},{"word":"clamp","phonemes":["k","l","æ","m","p"]},{"word":"clap","phonemes":["k","l","æ","p"]},{"word":"clasp","phonemes":["k","l","ɐː","s","p"]},{"word":"cleft","phonemes":["k","l","e","f","t"]},{"word":"cloud","phonemes":["k","l","æɔ","d"]},{"word":"cold","phonemes":["k","əʉ","l","d"]},{"word":"crab","phonemes":["k","ɹ","æ","b"]},{"word":"desk","phonemes":["d","e","s","k"]},{"word":"drink","phonemes":["d","ɹ","ɪ","ŋ","k"]},{"word":"drum","phonemes":["d","ɹ","ɐ","m"]},{"word":"fan","phonemes":["f","æ","n"]},{"word":"flask","phonemes":["f","l","ɐː","s","k"]},{"word":"fork","phonemes":["f","oː","k"]},{"word":"frame","phonemes":["f","ɹ","æɪ","m"]},{"word":"frog","phonemes":["f","ɹ","ɔ","ɡ"]},{"word":"gift","phonemes":["ɡ","ɪ","f","t"]},{"word":"glint","phonemes":["ɡ","l","ɪ","n","t"]},{"word":"golf","phonemes":["ɡ","ɔ","l","f"]},{"word":"grand","phonemes":["ɡ","ɹ","æ","n","d"]},{"word":"great","phonemes":["g","ɹ","æɪ","t"]},{"word":"grin","phonemes":["ɡ","ɹ","ɪ","n"]},{"word":"gum","phonemes":["ɡ","ɐ","m"]},{"word":"hand","phonemes":["h","æ","n","d"]},{"word":"hat","phonemes":["h","æ","t"]},{"word":"jam","phonemes":["dʒ","æ","m"]},{"word":"jump","phonemes":["dʒ","ɐ","m","p"]},{"word":"lamp","phonemes":["l","æ","m","p"]},{"word":"left","phonemes":["l","e","f","t"]},{"word":"log","phonemes":["l","ɔ","ɡ"]},{"word":"milk","phonemes":["m","ɪ","l","k"]},{"word":"plant","phonemes":["p","l","æ","n","t"]},{"word":"plug","phonemes":["p","l","ɐ","ɡ"]},{"word":"pond","phonemes":["p","ɔ","n","d"]},{"word":"quiz","phonemes":["k","w","ɪ","z"]},{"word":"ring","phonemes":["ɹ","ɪ","ŋ"]},{"word":"scrap","phonemes":["s","k","ɹ","æ","p"]},{"word":"scrawl","phonemes":["s","k","ɹ","oː","l"]},{"word":"scream","phonemes":["s","k","ɹ","iː","m"]},{"word":"scribe","phonemes":["s","k","ɹ","ɑe","b"]},{"word":"scrub","phonemes":["s","k","ɹ","ɐ","b"]},{"word":"ship","phonemes":["ʃ","ɪ","p"]},{"word":"shrimp","phonemes":["ʃ","ɹ","ɪ","m","p"]},{"word":"silk","phonemes":["s","ɪ","l","k"]},{"word":"slip","phonemes":["s","l","ɪ","p"]},{"word":"smile","phonemes":["s","m","ɑe","l"]},{"word":"smoked","phonemes":["s","m","əʉ","k","t"]},{"word":"snake","phonemes":["s","n","æɪ","k"]},{"word":"soft","phonemes":["s","ɔ","f","t"]},{"word":"splash","phonemes":["s","p","l","æ","ʃ"]},{"word":"sprawl","phonemes":["s","p","ɹ","oː","l"]},{"word":"sprig","phonemes":["s","p","ɹ","ɪ","ɡ"]},{"word":"spring","phonemes":["s","p","ɹ","ɪ","ŋ"]},{"word":"sprout","phonemes":["s","p","ɹ","æɔ","t"]},{"word":"stamp","phonemes":["s","t","æ","m","p"]},{"word":"stop","phonemes":["s","t","ɔ","p"]},{"word":"strain","phonemes":["s","t","ɹ","æɪ","n"]},{"word":"strap","phonemes":["s","t","ɹ","æ","p"]},{"word":"street","phonemes":["s","t","ɹ","iː","t"]},{"word":"sun","phonemes":["s","ɐ","n"]},{"word":"tent","phonemes":["t","e","n","t"]},{"word":"then","phonemes":["ð","e","n"]},{"word":"thin","phonemes":["θ","ɪ","n"]},{"word":"thrust","phonemes":["θ","ɹ","ɐ","s","t"]},{"word":"train","phonemes":["t","ɹ","æɪ","n"]},{"word":"trust","phonemes":["t","ɹ","ɐ","s","t"]},{"word":"twist","phonemes":["t","w","ɪ","s","t"]},{"word":"van","phonemes":["v","æ","n"]},{"word":"win","phonemes":["w","ɪ","n"]},{"word":"wind","phonemes":["w","ɪ","n","d"]},{"word":"yes","phonemes":["j","e","s"]},{"word":"zip","phonemes":["z","ɪ","p"]}];
+  var GRID_SIZE_WORD_COUNTS = {"8":6,"10":8,"12":10,"15":12};
+  var GRID_SIZE_OPTIONS = [8,10,12,15];
+  var KEYPAD_LEFT = [["p","t","k",""],["b","d","g",""],["n","m","ŋ",""],["f","s","θ","ʃ"],["v","z","ð","ʒ"],["l","ɹ","w","j"],["h","tʃ","dʒ",""]];
+  var KEYPAD_RIGHT = [["iː","ɪ","e","eː"],["æ","ɐ","ɐː","ɜː"],["ʉː","ɔ","oː","ʊ"],["æɪ","ɑe","oɪ","əʉ"],["æɔ","ɪə","","ə"]];
   var KEYPAD_RIGHT_TOP = KEYPAD_RIGHT.slice(0, 3);
   var KEYPAD_RIGHT_BOTTOM = KEYPAD_RIGHT.slice(3);
-  var GREAT_PHONEMES = ${greatPhonemesJson};
-  var GREAT_POSITIONS = ${greatPositionsJson};
+  var GREAT_PHONEMES = ["g","ɹ","æɪ","t"];
+  var GREAT_POSITIONS = {"8":{"row":4,"startCol":3},"10":{"row":5,"startCol":4},"12":{"row":6,"startCol":5},"15":{"row":7,"startCol":6}};
 
   var FLIP_MS = 500;
   var CELL_STAGGER_MS = 60;
@@ -816,11 +781,11 @@ input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
     } else if (!st.hintRevealed && !st.hintFlipping) {
       rowEl.hintEl.className = 'hidden-spacer'; rowEl.hintEl.textContent = ''; rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
     } else if (isFound) {
-      rowEl.hintEl.className = 'hint-box tick'; rowEl.hintEl.textContent = '\\u2713'; rowEl.hintEl.title = '';
+      rowEl.hintEl.className = 'hint-box tick'; rowEl.hintEl.textContent = '\u2713'; rowEl.hintEl.title = '';
       rowEl.hintEl.onclick = function () { handleFoundWordClick(st.word); };
     } else if (solve) {
       rowEl.hintEl.className = 'hint-box ' + (solve.hintRevealed ? 'tick' : 'qmark') + (solve.hintFlipping ? ' tile-flip' : '');
-      rowEl.hintEl.textContent = solve.hintRevealed ? '\\u2713' : '?';
+      rowEl.hintEl.textContent = solve.hintRevealed ? '\u2713' : '?';
       rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
     } else {
       var isThisHint = hintActive && hintActive.word === st.word;
@@ -905,8 +870,8 @@ input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
   // ---------- title demo ----------
   var TCOLS = 9, TROWS = 3;
   var TFIXED = [
-    { row: 2, col: 2, symbol: 'w' }, { row: 2, col: 3, symbol: '\\u025c\\u02d0' }, { row: 2, col: 4, symbol: 'd' },
-    { row: 1, col: 6, symbol: 's' }, { row: 2, col: 7, symbol: '\\u025c\\u02d0' }, { row: 3, col: 8, symbol: 't\\u0283' }
+    { row: 2, col: 2, symbol: 'w' }, { row: 2, col: 3, symbol: '\u025c\u02d0' }, { row: 2, col: 4, symbol: 'd' },
+    { row: 1, col: 6, symbol: 's' }, { row: 2, col: 7, symbol: '\u025c\u02d0' }, { row: 3, col: 8, symbol: 't\u0283' }
   ];
   function tFlatIndex(row, col) { return (row - 1) * TCOLS + (col - 1); }
   var TWORD1 = [tFlatIndex(2, 2), tFlatIndex(2, 3), tFlatIndex(2, 4)];
@@ -1285,5 +1250,4 @@ input:disabled + .slider { opacity: 0.4; cursor: not-allowed; }
 })();
 </script>
 </body>
-</html>`;
-}
+</html>

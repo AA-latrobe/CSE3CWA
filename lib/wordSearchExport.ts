@@ -1,4 +1,4 @@
-import { PhonemeWordEntry, KEYPAD_TOP, KEYPAD_BOTTOM, WORD_LIST } from './phonemeData';
+import { PhonemeWordEntry, KEYPAD_LEFT, KEYPAD_RIGHT, WORD_LIST } from './phonemeData';
 import { GREAT_WORD_POSITIONS, GRID_SIZE_WORD_COUNTS } from './wordSearchData';
 
 function formatTimestamp(): string {
@@ -25,8 +25,8 @@ export function downloadStandaloneWordSearchHtml(words: PhonemeWordEntry[], grid
 function generateStandaloneWordSearchHtml(words: PhonemeWordEntry[], gridSize: number): string {
   const wordDataJson = JSON.stringify(words);
   const masterWordListJson = JSON.stringify(WORD_LIST);
-  const keypadTopJson = JSON.stringify(KEYPAD_TOP);
-  const keypadBottomJson = JSON.stringify(KEYPAD_BOTTOM);
+  const keypadLeftJson = JSON.stringify(KEYPAD_LEFT);
+  const keypadRightJson = JSON.stringify(KEYPAD_RIGHT);
   const greatEntry = WORD_LIST.find((w) => w.word === 'great');
   const greatPhonemesJson = JSON.stringify(greatEntry ? greatEntry.phonemes : []);
   const greatPositionsJson = JSON.stringify(GREAT_WORD_POSITIONS);
@@ -94,7 +94,36 @@ body {
   border-radius: 0.5rem;
   padding: 1.5rem;
 }
-.title-row { display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-top: 52px; margin-bottom: 44px; width: 396px; margin-left: auto; margin-right: auto; position: relative; }
+
+/* ---------- title section: left keypad ref | title+subtitle | right keypad ref ---------- */
+.title-section {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: 32px;
+  align-items: start;
+  margin-top: 52px;
+  margin-bottom: 44px;
+}
+.title-keypad-col { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.title-keypad-left { justify-self: start; }
+.title-keypad-right { justify-self: end; }
+.title-keypad-label { margin:0; font-size:0.875rem; font-weight:500; color:var(--foreground); line-height:1.2; }
+.title-keypad-grid { display:grid; grid-template-columns: repeat(4, 26px); gap:4px; }
+.title-ref-key {
+  width:26px; height:26px; border-radius:0.375rem; border:1px solid rgba(128,128,128,0.2);
+  background:var(--background); color:var(--foreground); display:flex; align-items:center; justify-content:center;
+  font-size:0.875rem; font-weight:500;
+}
+.title-middle-col { display:flex; flex-direction:column; align-items:center; min-width:0; }
+
+@media (max-width: 700px) {
+  .title-section { display:flex; flex-direction:column; align-items:center; gap:24px; }
+  .title-middle-col { order:-1; }
+  .title-keypad-left { order:0; }
+  .title-keypad-right { order:1; }
+}
+
+.title-row { display:flex; flex-wrap: wrap; justify-content:center; gap:4px; margin-bottom: 30px; width: 396px; position: relative; }
 .title-tile {
   width:40px; height:40px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
   font-size:1rem; font-weight:500; border:2px solid rgba(128,128,128,0.2); color: var(--foreground);
@@ -103,7 +132,7 @@ body {
 .title-tile.grey { border:none; background: var(--key); color: var(--key-foreground); }
 .title-tile.yellow { background: var(--partial); color: var(--partial-foreground); border-color: transparent; }
 .title-tile.green { background: var(--match); color: var(--match-foreground); border-color: transparent; }
-.subtitle-row { display:flex; align-items:center; justify-content:center; gap:4px; font-size:1.125rem; color: rgba(128,128,128,0.9); margin: 0 0 30px 0; }
+.subtitle-row { display:flex; align-items:center; justify-content:center; gap:4px; font-size:1.125rem; color: rgba(128,128,128,0.9); margin: 0; }
 .instructions-row { text-align:center; font-size:1rem; color: rgba(128,128,128,0.9); margin: 0 0 8px 0; }
 .instructions-row.with-gap { margin-bottom: 44px; }
 .instructions-row-2 { display:flex; align-items:center; justify-content:center; gap:8px; font-size:1rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
@@ -191,12 +220,26 @@ input:checked + .slider:before { transform: translateX(20px); }
 </head>
 <body>
 <div class="panel">
-  <div class="title-row" id="titleRow"></div>
-  <div class="subtitle-row" id="subtitleRow">
-    <span>A Phoneme</span>
-    <div class="title-word-box" id="titleWordBox"></div>
-    <div class="title-word-box" id="titleSearchBox"></div>
-    <span>Game</span>
+  <div class="title-section">
+    <div class="title-keypad-col title-keypad-left">
+      <p class="title-keypad-label">Consonant Sounds:</p>
+      <div class="title-keypad-grid" id="refKeypadLeft"></div>
+    </div>
+    <div class="title-middle-col">
+      <div class="title-row" id="titleRow"></div>
+      <div class="subtitle-row" id="subtitleRow">
+        <span>A Phoneme</span>
+        <div class="title-word-box" id="titleWordBox"></div>
+        <div class="title-word-box" id="titleSearchBox"></div>
+        <span>Game</span>
+      </div>
+    </div>
+    <div class="title-keypad-col title-keypad-right">
+      <p class="title-keypad-label">Short &amp; Long<br>Vowels:</p>
+      <div class="title-keypad-grid" id="refKeypadRightTop"></div>
+      <p class="title-keypad-label" style="margin-top:8px;">Diphthongs &amp;<br>Schwa:</p>
+      <div class="title-keypad-grid" id="refKeypadRightBottom"></div>
+    </div>
   </div>
   <p class="instructions-row">To make a guess, click on a phoneme symbol and hold down your mouse while dragging, then release.</p>
   <div class="instructions-row-2">
@@ -242,8 +285,10 @@ input:checked + .slider:before { transform: translateX(20px); }
   var MASTER_WORD_LIST = ${masterWordListJson};
   var GRID_SIZE_WORD_COUNTS = ${wordCountsJson};
   var GRID_SIZE_OPTIONS = ${gridSizeOptionsJson};
-  var KEYPAD_TOP = ${keypadTopJson};
-  var KEYPAD_BOTTOM = ${keypadBottomJson};
+  var KEYPAD_LEFT = ${keypadLeftJson};
+  var KEYPAD_RIGHT = ${keypadRightJson};
+  var KEYPAD_RIGHT_TOP = KEYPAD_RIGHT.slice(0, 3);
+  var KEYPAD_RIGHT_BOTTOM = KEYPAD_RIGHT.slice(3);
   var GREAT_PHONEMES = ${greatPhonemesJson};
   var GREAT_POSITIONS = ${greatPositionsJson};
 
@@ -289,7 +334,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     return examples ? '/' + symbol + '/  ' + examples : '/' + symbol + '/';
   }
 
-  var ALL_PHONEME_SYMBOLS = KEYPAD_TOP.concat(KEYPAD_BOTTOM).reduce(function (acc, row) { return acc.concat(row); }, []).filter(function (s) { return s; });
+  var ALL_PHONEME_SYMBOLS = KEYPAD_LEFT.concat(KEYPAD_RIGHT).reduce(function (acc, row) { return acc.concat(row); }, []).filter(function (s) { return s; });
 
   function randomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
   function randomPhoneme() { return ALL_PHONEME_SYMBOLS[randomInt(0, ALL_PHONEME_SYMBOLS.length - 1)]; }
@@ -321,6 +366,28 @@ input:checked + .slider:before { transform: translateX(20px); }
   hcToggle.checked = themeState.hc;
   darkToggle.addEventListener('change', function () { themeState.dark = darkToggle.checked; applyTheme(themeState); });
   hcToggle.addEventListener('change', function () { themeState.hc = hcToggle.checked; applyTheme(themeState); });
+
+  // ---------- read-only reference keypads (static — built once, never re-rendered) ----------
+  function buildReferenceKeypad(container, grid) {
+    container.innerHTML = '';
+    grid.forEach(function (row) {
+      row.forEach(function (symbol) {
+        if (!symbol) {
+          var spacer = document.createElement('div');
+          container.appendChild(spacer);
+          return;
+        }
+        var el = document.createElement('div');
+        el.className = 'title-ref-key';
+        el.textContent = symbol;
+        el.title = phonemeHoverText(symbol);
+        container.appendChild(el);
+      });
+    });
+  }
+  buildReferenceKeypad(document.getElementById('refKeypadLeft'), KEYPAD_LEFT);
+  buildReferenceKeypad(document.getElementById('refKeypadRightTop'), KEYPAD_RIGHT_TOP);
+  buildReferenceKeypad(document.getElementById('refKeypadRightBottom'), KEYPAD_RIGHT_BOTTOM);
 
   // ---------- connector geometry (shared by word connectors, "great" connectors, and the title demo) ----------
   function computeSegmentsForCellSequence(cellsArr, cellSize, gap, thickness, overlap, keyPrefix) {
@@ -790,9 +857,6 @@ input:checked + .slider:before { transform: translateX(20px); }
     rowEl.engEl.style.width = engWidth + 'px';
 
     if (!st.englishRevealed && !st.englishFlipping) {
-      // Empty white/bordered box — same look as the phoneme boxes'
-      // "not yet revealed" state — instead of fully invisible, so the
-      // flip-to-blue animation visibly starts FROM this box.
       rowEl.engEl.className = 'eng-box empty'; rowEl.engEl.textContent = '';
     } else if (isFound || (solve && solve.wordBoxRevealed)) {
       rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
@@ -891,7 +955,7 @@ input:checked + .slider:before { transform: translateX(20px); }
       el.title = text ? phonemeHoverText(text) : '';
     }
   }
-  
+
   function setTitleBox(el, cls, flipping, text) {
     el.className = 'title-word-box' + (cls ? ' ' + cls : '') + (flipping ? ' tile-flip' : '');
     if (text !== undefined) el.textContent = text;

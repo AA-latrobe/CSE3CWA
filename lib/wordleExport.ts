@@ -14,7 +14,7 @@ export function downloadStandaloneWordleHtml(words: PhonemeWordEntry[], numGuess
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `word_puzzle_${formatTimestamp()}.html`;
+  a.download = `phoneme_wordle_${formatTimestamp()}.html`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -557,7 +557,7 @@ export default function WordSearchBuilder() {
       </div>
 
       <div className="rounded-md border border-foreground/10 bg-background p-4 sm:p-6">
-        <h2 className="mb-6 text-lg font-semibold text-foreground">Configure Game</h2>
+        <h2 className="mb-6 text-lg font-semibold text-foreground">Configure Word Search</h2>
         <PhonemeWordSelector
           selectedWords={selectedWords}
           onSelectedWordsChange={handleSelectedWordsChange}

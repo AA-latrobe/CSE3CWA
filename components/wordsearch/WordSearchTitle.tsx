@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { KEYPAD_TOP, KEYPAD_BOTTOM, getPhonemeHoverText } from '@/lib/phonemeData';
+import { KEYPAD_TOP, KEYPAD_BOTTOM, KEYPAD_LEFT, KEYPAD_RIGHT, getPhonemeHoverText } from '@/lib/phonemeData';
 import { computeSegmentsForCellSequence, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP } from '@/lib/wordSearchConnectors';
+import { useContainerWidth } from '@/lib/useContainerWidth';
 
 const ALL_PHONEME_SYMBOLS = [...KEYPAD_TOP, ...KEYPAD_BOTTOM]
   .flat()
@@ -66,6 +67,12 @@ const GAP_BETWEEN_WORDS_MS = 500;
 const CELL_STAGGER_MS = 60;
 const HINT_INDICATOR_SIZE = 26;
 
+// Read-only reference keypad sizing — matches the Word List phoneme boxes.
+const REF_BOX_SIZE = 26;
+const REF_GAP = 4;
+const REF_COLS = 4;
+const SIDE_BY_SIDE_THRESHOLD = 720; // below this, the 3-column row stacks
+
 function emptyCellState(): CellState {
   return { revealed: false, flipping: false, color: 'grey' };
 }
@@ -79,7 +86,35 @@ type Props = {
   onComplete?: () => void;
 };
 
+function ReferenceKeypadGrid({ grid, keyPrefix }: { grid: string[][]; keyPrefix: string }) {
+  return (
+    <div
+      className="grid"
+      style={{ gridTemplateColumns: `repeat(${REF_COLS}, ${REF_BOX_SIZE}px)`, gap: REF_GAP }}
+    >
+      {grid.flatMap((row, ri) =>
+        row.map((symbol, ci) =>
+          symbol ? (
+            <div
+              key={`${keyPrefix}-${ri}-${ci}`}
+              title={getPhonemeHoverText(symbol)}
+              className="flex items-center justify-center rounded-md border border-foreground/20 bg-background text-sm font-medium text-foreground"
+              style={{ width: REF_BOX_SIZE, height: REF_BOX_SIZE }}
+            >
+              {symbol}
+            </div>
+          ) : (
+            <div key={`${keyPrefix}-${ri}-${ci}`} style={{ width: REF_BOX_SIZE, height: REF_BOX_SIZE }} />
+          )
+        )
+      )}
+    </div>
+  );
+}
+
 export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }: Props) {
+  const { ref: rowRef, isWide: rowWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
+
   const symbolsRef = useRef<string[]>([]);
   const [cellStates, setCellStates] = useState<CellState[]>(() =>
     Array.from({ length: ROWS * COLS }, emptyCellState)
@@ -90,11 +125,6 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
   const [word2ConnectedCount, setWord2ConnectedCount] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // New: the "hint box" shown in the second instructions line — starts
-  // as a white/bordered box with "?" always visible, flips to yellow the
-  // moment the game genuinely becomes playable (tracked via the
-  // isPlayable prop, independent of this component's own internal
-  // title-animation timers).
   const [hintIndicatorRevealed, setHintIndicatorRevealed] = useState(false);
   const [hintIndicatorFlipping, setHintIndicatorFlipping] = useState(false);
   const prevIsPlayableRef = useRef(false);
@@ -128,6 +158,9 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
     []
   );
 
+  const keypadRightTop = useMemo(() => KEYPAD_RIGHT.slice(0, 3), []);
+  const keypadRightBottom = useMemo(() => KEYPAD_RIGHT.slice(3), []);
+
   useEffect(() => {
     const fixedMap = new Map<string, string>();
     for (const cell of FIXED_CELLS) fixedMap.set(`${cell.row},${cell.col}`, cell.symbol);
@@ -145,8 +178,6 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
     setWord1ConnectedCount(0);
     setWord2ConnectedCount(0);
 
-    // Reset the hint indicator back to white/not-revealed on every title
-    // replay too, so it visually matches "everything else starts over."
     hintIndicatorTimers.current.forEach(clearTimeout);
     hintIndicatorTimers.current = [];
     setHintIndicatorRevealed(false);
@@ -308,11 +339,6 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
     };
   }, [resetSignal]);
 
-  // Watches the game's real playable state (from WordSearchBuilder) —
-  // completely decoupled from this component's own title-animation
-  // timers. Fires once per false→true transition: flips the hint
-  // indicator box from white to yellow at the exact moment the game
-  // first becomes playable (same moment Start New Puzzle enables).
   useEffect(() => {
     if (isPlayable && !prevIsPlayableRef.current) {
       prevIsPlayableRef.current = true;
@@ -347,7 +373,7 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
     return 'border-2 border-word-reveal bg-background text-foreground line-through';
   }
 
-  return (
+  const titleBlock = (
     <div>
       <div className="flex justify-center" style={{ marginBottom: 44 }}>
         <div
@@ -398,10 +424,7 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
         </div>
       </div>
 
-      <div
-        className="flex items-center justify-center gap-1 text-lg text-foreground/70"
-        style={{ marginBottom: 30 }}
-      >
+      <div className="flex items-center justify-center gap-1 text-lg text-foreground/70">
         <span>A Phoneme</span>
         <div style={{ perspective: '400px' }}>
           <div
@@ -424,6 +447,54 @@ export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }:
           </div>
         </div>
         <span>Game</span>
+      </div>
+    </div>
+  );
+
+  const leftKeypadRef = (
+    <div className="flex flex-col items-start gap-1">
+      <p className="text-sm font-medium text-foreground">Consonant Sounds:</p>
+      <ReferenceKeypadGrid grid={KEYPAD_LEFT} keyPrefix="ref-left" />
+    </div>
+  );
+
+  const rightKeypadRef = (
+    <div className="flex flex-col items-start gap-1">
+      <p className="text-sm font-medium leading-tight text-foreground">
+        Short &amp; Long
+        <br />
+        Vowels:
+      </p>
+      <ReferenceKeypadGrid grid={keypadRightTop} keyPrefix="ref-right-top" />
+      <p className="mt-2 text-sm font-medium leading-tight text-foreground">
+        Diphthongs &amp;
+        <br />
+        Schwa:
+      </p>
+      <ReferenceKeypadGrid grid={keypadRightBottom} keyPrefix="ref-right-bottom" />
+    </div>
+  );
+
+  return (
+    <div>
+      <div
+        ref={rowRef}
+        className={rowWide ? 'grid items-start' : 'flex flex-col items-center gap-6'}
+        style={rowWide ? { gridTemplateColumns: 'auto 1fr auto', columnGap: 32, marginBottom: 44 } : { marginBottom: 44 }}
+      >
+        {rowWide ? (
+          <>
+            {leftKeypadRef}
+            <div className="flex justify-center">{titleBlock}</div>
+            <div className="flex justify-end">{rightKeypadRef}</div>
+          </>
+        ) : (
+          <>
+            {titleBlock}
+            {leftKeypadRef}
+            {rightKeypadRef}
+          </>
+        )}
       </div>
 
       <div

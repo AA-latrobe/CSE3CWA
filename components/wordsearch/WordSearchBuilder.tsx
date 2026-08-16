@@ -43,8 +43,8 @@ const SOLVE_STAGGER_MS = 150;
 const SOLVE_HOLD_MS = 1000;
 
 const INTRO_FLIP_MS = 500;
-const CELL_STAGGER_MS = 60; // gap between successive cells starting within one row (grid intro reveal)
-const LETTER_STAGGER_MS = 60; // gap between successive letters starting within one word (word list intro reveal)
+const CELL_STAGGER_MS = 60;
+const LETTER_STAGGER_MS = 60;
 const GRID_ROW_STAGGER_MS = 80;
 
 export default function WordSearchBuilder() {
@@ -76,6 +76,10 @@ export default function WordSearchBuilder() {
   const [letterStates, setLetterStates] = useState<IntroLetterState[]>([]);
   const [isPlayable, setIsPlayable] = useState(false);
   const introTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // --- click-to-replay a found word's letters on the grid ---
+  const [replayFlippingKeys, setReplayFlippingKeys] = useState<Set<string>>(new Set());
+  const replayTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // --- completion flourish state ---
   const [completionFlipSignal, setCompletionFlipSignal] = useState(0);
@@ -114,11 +118,18 @@ export default function WordSearchBuilder() {
 
   const isPuzzleComplete = placedWords.length > 0 && foundWords.size === placedWords.length;
 
+  const clearReplay = () => {
+    replayTimersRef.current.forEach(clearTimeout);
+    replayTimersRef.current = [];
+    setReplayFlippingKeys(new Set());
+  };
+
   // Fires the completion flourish exactly once per puzzle, the moment
   // the last word gets found.
   useEffect(() => {
     if (isPuzzleComplete && !hasTriggeredCompletionRef.current) {
       hasTriggeredCompletionRef.current = true;
+      clearReplay();
       setCompletionFlipSignal((n) => n + 1);
     }
   }, [isPuzzleComplete]);
@@ -136,6 +147,7 @@ export default function WordSearchBuilder() {
 
   const resetIntroState = (size: number, words: PhonemeWordEntry[]) => {
     clearIntroTimers();
+    clearReplay();
     setGridCellFlip(
       Array.from({ length: size }, () =>
         Array.from({ length: size }, () => ({ revealed: false, flipping: false }))
@@ -172,7 +184,6 @@ export default function WordSearchBuilder() {
     const STAGGER_MS = INTRO_FLIP_MS / 2;
     let time = 1000;
 
-    // Stage 1: grid rows — cells within a row stagger, rows overlap.
     let stage1End = time;
     for (let row = 0; row < gridSize; row++) {
       let rowEnd = time;
@@ -208,11 +219,10 @@ export default function WordSearchBuilder() {
         rowEnd = Math.max(rowEnd, cellStart + INTRO_FLIP_MS);
       }
       stage1End = Math.max(stage1End, rowEnd);
-      time += GRID_ROW_STAGGER_MS; // was: time += STAGGER_MS
+      time += GRID_ROW_STAGGER_MS;
     }
     time = stage1End;
 
-    // Stage 2: English word boxes only, one overlapping pass down the list.
     selectedWords.forEach((entry, idx) => {
       const word = entry.word;
       const start = time + idx * STAGGER_MS;
@@ -232,8 +242,6 @@ export default function WordSearchBuilder() {
       selectedWords.length > 0 ? time + (selectedWords.length - 1) * STAGGER_MS + INTRO_FLIP_MS : time;
     time = stage2End;
 
-    // Stage 3: per row — hint box (if placed) then each phoneme letter in
-    // quick succession. Rows themselves overlap with each other.
     let stage3MaxEnd = time;
     selectedWords.forEach((entry, idx) => {
       const word = entry.word;
@@ -311,6 +319,36 @@ export default function WordSearchBuilder() {
     const idx = Math.floor(Math.random() * entry.phonemes.length);
     hintCounter.current += 1;
     setHint({ word: entry.word, phonemeIndex: idx, nonce: hintCounter.current });
+  };
+
+  // Click-to-replay on a found word's tick box: flips that word's grid
+  // cells (only the grid — the word list is already fully green) one at
+  // a time, in order, with no color change. Disabled once the puzzle is
+  // complete and the completion flourish has begun.
+  const handleFoundWordClick = (word: string) => {
+    if (isPuzzleComplete) return;
+    if (!foundWords.has(word)) return;
+    const cells = wordPhonemeCells[word];
+    if (!cells || cells.length === 0) return;
+
+    clearReplay();
+
+    cells.forEach((cell, i) => {
+      const key = `${cell.row},${cell.col}`;
+      const start = i * SOLVE_STAGGER_MS;
+      replayTimersRef.current.push(
+        setTimeout(() => setReplayFlippingKeys((prev) => new Set(prev).add(key)), start),
+        setTimeout(
+          () =>
+            setReplayFlippingKeys((prev) => {
+              const next = new Set(prev);
+              next.delete(key);
+              return next;
+            }),
+          start + SOLVE_FLIP_MS
+        )
+      );
+    });
   };
 
   const beginSolveSequence = (word: string) => {
@@ -503,8 +541,11 @@ export default function WordSearchBuilder() {
     return () => {
       solveTimersRef.current.forEach((timers) => timers.forEach(clearTimeout));
       clearIntroTimers();
+      replayTimersRef.current.forEach(clearTimeout);
     };
   }, []);
+
+  const gridIsPlayable = isPlayable && !isPuzzleComplete;
 
   return (
     <div className="space-y-8">
@@ -562,7 +603,7 @@ export default function WordSearchBuilder() {
           </div>
         </div>
 
-        <WordSearchTitle resetSignal={titleSignal} onComplete={handleTitleComplete} />
+        <WordSearchTitle resetSignal={titleSignal} isPlayable={gridIsPlayable} onComplete={handleTitleComplete} />
 
         <WordSearchGrid
           gridSize={gridSize}
@@ -575,6 +616,8 @@ export default function WordSearchBuilder() {
           placedWordSet={placedWordSet}
           hint={hint}
           onHintClick={handleHintClick}
+          onFoundWordClick={handleFoundWordClick}
+          replayFlippingKeys={replayFlippingKeys}
           foundWords={foundWords}
           solves={solves}
           onWordMatched={handleWordMatched}
@@ -584,7 +627,7 @@ export default function WordSearchBuilder() {
           hintRevealed={hintRevealed}
           hintFlippingWords={hintFlippingWords}
           letterStates={letterStates}
-          isPlayable={isPlayable && !isPuzzleComplete}
+          isPlayable={gridIsPlayable}
           completionFlipSignal={completionFlipSignal}
           onStartNewPuzzle={handleBuildPuzzle}
           isDarkTheme={theme === 'dark'}

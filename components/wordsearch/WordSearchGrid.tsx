@@ -44,6 +44,8 @@ type Props = {
   placedWordSet: Set<string>;
   hint: HintState;
   onHintClick: (entry: PhonemeWordEntry) => void;
+  onFoundWordClick: (word: string) => void;
+  replayFlippingKeys: Set<string>;
   foundWords: Set<string>;
   solves: SolveState[];
   onWordMatched: (word: string) => void;
@@ -93,6 +95,7 @@ function GridCellView({
   introRevealed,
   introFlipping,
   completionFlipping,
+  replayFlipping,
   finaleStage,
   finaleFlipping,
   isSpecialCell,
@@ -112,6 +115,7 @@ function GridCellView({
   introRevealed: boolean;
   introFlipping: boolean;
   completionFlipping: boolean;
+  replayFlipping: boolean;
   finaleStage: 0 | 1 | 2;
   finaleFlipping: boolean;
   isSpecialCell: boolean;
@@ -203,6 +207,13 @@ function GridCellView({
     isFlipping = true;
   }
 
+  // Click-to-replay on an already-found word: purely a flip flourish on
+  // the grid cell (color stays whatever it already was — green) — no
+  // color change involved, unlike hint/solve overlays above.
+  if (replayFlipping) {
+    isFlipping = true;
+  }
+
   return (
     <div style={{ perspective: '400px' }}>
       <div
@@ -232,6 +243,8 @@ export default function WordSearchGrid({
   placedWordSet,
   hint,
   onHintClick,
+  onFoundWordClick,
+  replayFlippingKeys,
   foundWords,
   solves,
   onWordMatched,
@@ -320,10 +333,6 @@ export default function WordSearchGrid({
     return computeConnectorSegments(wordPhonemeCells, foundWords, solves, cellSize, MIN_GAP);
   }, [wordPhonemeCells, foundWords, solves, cellSize, finalePhase]);
 
-  // Progressive: only reveal each "great" connector once the SPECIFIC
-  // special cell it connects to has genuinely finished its own flip —
-  // not the instant finalePhase becomes 1 (which is when the whole
-  // stage starts, before any individual symbol has appeared).
   const greatConnectorSegments = useMemo(() => {
     if (finalePhase !== 1) return [];
     const all = computeSegmentsForCellSequence(
@@ -418,9 +427,6 @@ export default function WordSearchGrid({
           start + COMPLETION_FLIP_MS
         );
 
-        // This cell's own flip finishes at start + COMPLETION_FLIP_MS —
-        // if it's one of the "great" special cells, reveal the connector
-        // BACK to the previous special cell at that exact moment.
         const specialIdx = specialCells.findIndex((sc) => sc.row === r && sc.col === c);
         if (specialIdx > 0) {
           t(() => setGreatConnectedCount(specialIdx), start + COMPLETION_FLIP_MS);
@@ -557,6 +563,7 @@ export default function WordSearchGrid({
         placedWordSet={placedWordSet}
         hint={hint}
         onHintClick={onHintClick}
+        onFoundWordClick={onFoundWordClick}
         foundWords={foundWords}
         solves={solves}
         englishRevealed={englishRevealed}
@@ -653,6 +660,7 @@ export default function WordSearchGrid({
                 : hoverKey === key;
               const releaseToken = releaseInfo && releaseInfo.cells.has(key) ? releaseInfo.token : null;
               const isCompletionFlipping = completionFlipping.has(key);
+              const isReplayFlipping = replayFlippingKeys.has(key);
 
               return (
                 <GridCellView
@@ -669,6 +677,7 @@ export default function WordSearchGrid({
                   introRevealed={introRevealed}
                   introFlipping={introFlipping}
                   completionFlipping={isCompletionFlipping}
+                  replayFlipping={isReplayFlipping}
                   finaleStage={finaleStage}
                   finaleFlipping={finaleFlipping}
                   isSpecialCell={isSpecialCell}

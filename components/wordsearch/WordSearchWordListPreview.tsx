@@ -18,6 +18,7 @@ type Props = {
   placedWordSet: Set<string>;
   hint: HintState;
   onHintClick: (entry: PhonemeWordEntry) => void;
+  onFoundWordClick: (word: string) => void;
   foundWords: Set<string>;
   solves: SolveState[];
   englishRevealed: Set<string>;
@@ -34,7 +35,8 @@ const GROUP_GAP = GAP * 2;
 
 // Fully invisible placeholder — reserves the exact same footprint so
 // layout never shifts, but shows nothing at all until this box's own
-// turn to open arrives (per "hidden from view" requirement).
+// turn to open arrives. Still used for the phoneme letter boxes and the
+// hint "?" box, which deliberately start invisible.
 function HiddenBox({ width = BOX_SIZE, height = BOX_SIZE }: { width?: number; height?: number }) {
   return <div style={{ width, height }} />;
 }
@@ -45,12 +47,14 @@ function HintBox({
   introFlipping,
   triggerId,
   onClick,
+  onFoundClick,
 }: {
   isFound: boolean;
   solve: SolveState | null;
   introFlipping: boolean;
   triggerId: string | null;
   onClick: () => void;
+  onFoundClick: () => void;
 }) {
   const { flipping: hintFlipping } = useHintFlip(triggerId);
   const isFlipping = hintFlipping || introFlipping;
@@ -58,12 +62,14 @@ function HintBox({
   if (isFound) {
     return (
       <div style={{ perspective: '400px' }}>
-        <div
-          className="flex items-center justify-center rounded-md border border-foreground/20 bg-background text-sm font-semibold text-match"
+        <button
+          type="button"
+          onClick={onFoundClick}
+          className="flex items-center justify-center rounded-md border border-foreground/20 bg-background text-sm font-semibold text-match hover:opacity-80"
           style={{ width: BOX_SIZE, height: BOX_SIZE }}
         >
           ✓
-        </div>
+        </button>
       </div>
     );
   }
@@ -168,6 +174,7 @@ export default function WordSearchWordListPreview({
   placedWordSet,
   hint,
   onHintClick,
+  onFoundWordClick,
   foundWords,
   solves,
   englishRevealed,
@@ -219,6 +226,7 @@ export default function WordSearchWordListPreview({
                     introFlipping={hintFlippingNow}
                     triggerId={hintForThisWord ? `${entry.word}-box-${hintForThisWord.nonce}` : null}
                     onClick={() => onHintClick(entry)}
+                    onFoundClick={() => onFoundWordClick(entry.word)}
                   />
                 ) : (
                   <HiddenBox />
@@ -276,9 +284,18 @@ export default function WordSearchWordListPreview({
                     }}
                   />
                 ) : !englishShown ? (
-                  <div style={{ marginLeft: BOX_SIZE + GAP }}>
-                    <HiddenBox width={englishWordWidth} height={BOX_SIZE} />
-                  </div>
+                  // Empty white/bordered box, matching the phoneme boxes'
+                  // "not yet revealed" look — the flip-to-blue animation
+                  // now visibly starts FROM this box rather than popping
+                  // in from total invisibility.
+                  <div
+                    className="rounded-md border border-foreground/20 bg-background"
+                    style={{
+                      width: englishWordWidth,
+                      height: BOX_SIZE,
+                      marginLeft: BOX_SIZE + GAP,
+                    }}
+                  />
                 ) : (
                   <div
                     className={`flex items-center justify-center rounded-md ${

@@ -104,7 +104,15 @@ body {
 .title-tile.yellow { background: var(--partial); color: var(--partial-foreground); border-color: transparent; }
 .title-tile.green { background: var(--match); color: var(--match-foreground); border-color: transparent; }
 .subtitle-row { display:flex; align-items:center; justify-content:center; gap:4px; font-size:1.125rem; color: rgba(128,128,128,0.9); margin: 0 0 30px 0; }
-.instructions-row { text-align:center; font-size:1rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
+.instructions-row { text-align:center; font-size:1rem; color: rgba(128,128,128,0.9); margin: 0 0 8px 0; }
+.instructions-row.with-gap { margin-bottom: 44px; }
+.instructions-row-2 { display:flex; align-items:center; justify-content:center; gap:8px; font-size:1rem; color: rgba(128,128,128,0.9); margin: 0 0 44px 0; }
+.hint-indicator {
+  width:26px; height:26px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
+  font-size:0.75rem; font-weight:600; perspective:400px;
+}
+.hint-indicator.empty { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground); }
+.hint-indicator.yellow { background: var(--partial); color: var(--partial-foreground); border:none; }
 .title-word-box {
   width:128px; height:40px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center;
   font-size:1.125rem; font-weight:600; border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground);
@@ -131,7 +139,8 @@ body {
 .ph-slot.green { background: var(--match); color: var(--match-foreground); }
 .ph-slot.yellow { background: var(--partial); color: var(--partial-foreground); }
 .hint-box.qmark { background: var(--partial); color: var(--partial-foreground); cursor: pointer; border: none; }
-.hint-box.tick { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--match); }
+.hint-box.tick { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--match); cursor: pointer; }
+.eng-box.empty { border:1px solid rgba(128,128,128,0.2); background: var(--background); }
 .eng-box.blue { background: var(--word-reveal); color: var(--word-reveal-foreground); }
 .eng-box.solved { border:1px solid rgba(128,128,128,0.2); background: var(--background); color: var(--foreground); text-decoration: line-through; }
 
@@ -190,6 +199,11 @@ input:checked + .slider:before { transform: translateX(20px); }
     <span>Game</span>
   </div>
   <p class="instructions-row">To make a guess, click on a phoneme symbol and hold down your mouse while dragging, then release.</p>
+  <div class="instructions-row-2">
+    <span>If you get stuck, click on a word's</span>
+    <div class="hint-indicator empty" id="hintIndicator">?</div>
+    <span>for a hint.</span>
+  </div>
   <div class="game-row">
     <div class="wordlist-col">
       <p class="wordlist-title">Word List:</p>
@@ -417,8 +431,15 @@ input:checked + .slider:before { transform: translateX(20px); }
   var showGreatBox, greatBoxRevealed, greatBoxFlipping;
   var wordRowsState, startNewPuzzleReady;
   var cellEls, wordRowEls;
-  var finalePhase; // 0 = normal play; 1 = finale green-empty phase (great cells filled); 2 = finale blue-empty phase (great cells gone)
-  var greatConnectedCount; // how many "great" connector segments are currently revealed, progressive during phase 1
+  var finalePhase;
+  var greatConnectedCount;
+  var replayFlipping; // key -> true while that grid cell is mid click-to-replay flip
+
+  // Hint indicator — deliberately NOT reset by setupPuzzle. It flips
+  // yellow exactly once, the first time the game ever becomes playable,
+  // and stays yellow forever after (including across Start New Puzzle).
+  var hintIndicatorEverRevealed = false;
+  var hintIndicatorEl = document.getElementById('hintIndicator');
 
   var gridEl = document.getElementById('grid');
   var gridInnerEl = document.getElementById('gridInner');
@@ -426,7 +447,32 @@ input:checked + .slider:before { transform: translateX(20px); }
   var wordListCol = document.getElementById('wordListCol');
   var startNewBtn = document.getElementById('startNewBtn');
 
+  var dynamicStyleEl = document.createElement('style');
+  document.head.appendChild(dynamicStyleEl);
+
+  function updateResponsiveBreakpoint() {
+    var wordListColWidth = 176;
+    var rowGap = 24;
+    var cellSize = 40; // cells are currently fixed-size, no responsive shrink implemented yet
+    var naturalGridWidth = GRID_SIZE * cellSize + (GRID_SIZE - 1) * 4;
+    var breakpoint = wordListColWidth + rowGap + naturalGridWidth;
+    dynamicStyleEl.textContent =
+      '@media (max-width: ' + breakpoint + 'px) { .game-row { flex-direction: column; } }';
+  }
+
   function cellKey(r, c) { return r + ',' + c; }
+
+  function triggerHintIndicatorIfFirstTime() {
+    if (hintIndicatorEverRevealed) return;
+    hintIndicatorEverRevealed = true;
+    hintIndicatorEl.classList.add('tile-flip');
+    setTimeout(function () {
+      hintIndicatorEl.className = 'hint-indicator yellow tile-flip';
+    }, FLIP_MS / 2);
+    setTimeout(function () {
+      hintIndicatorEl.classList.remove('tile-flip');
+    }, FLIP_MS);
+  }
 
   // ---------- connectors: found words + "great" cells ----------
   function computeWordConnectorSegments() {
@@ -446,10 +492,6 @@ input:checked + .slider:before { transform: translateX(20px); }
     return segments;
   }
   function computeGreatConnectorSegments() {
-    // Only visible during phase 1 (green-empty phase), and only the
-    // segments that have progressively been earned so far — NOT every
-    // segment the instant phase 1 begins, which would show connectors
-    // to symbols that haven't actually flipped into view yet.
     if (finalePhase !== 1) return [];
     var all = computeSegmentsForCellSequence(specialCells, 40, 4, CONNECTOR_THICKNESS, CONNECTOR_OVERLAP, 'great');
     return all.slice(0, greatConnectedCount);
@@ -463,6 +505,7 @@ input:checked + .slider:before { transform: translateX(20px); }
   function setupPuzzle(words, size) {
     WORD_DATA = words;
     GRID_SIZE = size;
+    updateResponsiveBreakpoint();
 
     var genResult = generateGrid(WORD_DATA, GRID_SIZE);
     grid = genResult.grid;
@@ -485,6 +528,7 @@ input:checked + .slider:before { transform: translateX(20px); }
     startNewPuzzleReady = false;
     finalePhase = 0;
     greatConnectedCount = 0;
+    replayFlipping = {};
 
     GREAT_POS = GREAT_POSITIONS[GRID_SIZE];
     specialCells = [];
@@ -633,6 +677,9 @@ input:checked + .slider:before { transform: translateX(20px); }
     if (completionFlipping[key]) flipping = true;
     if (hintActive && hintActive.cellKey === key && hintActive.flipping && !hintActive.revealed) flipping = true;
 
+    // Click-to-replay overlay — same color, flip only, no color change.
+    if (replayFlipping[key]) flipping = true;
+
     el.className = 'gcell ' + colorClass + (flipping ? ' tile-flip' : '');
     el.textContent = symbol || '';
     el.title = symbol ? ('/' + symbol + '/') : '';
@@ -681,7 +728,8 @@ input:checked + .slider:before { transform: translateX(20px); }
     } else if (!st.hintRevealed && !st.hintFlipping) {
       rowEl.hintEl.className = 'hidden-spacer'; rowEl.hintEl.textContent = ''; rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
     } else if (isFound) {
-      rowEl.hintEl.className = 'hint-box tick'; rowEl.hintEl.textContent = '\\u2713'; rowEl.hintEl.title = ''; rowEl.hintEl.onclick = null;
+      rowEl.hintEl.className = 'hint-box tick'; rowEl.hintEl.textContent = '\\u2713'; rowEl.hintEl.title = '';
+      rowEl.hintEl.onclick = function () { handleFoundWordClick(st.word); };
     } else if (solve) {
       rowEl.hintEl.className = 'hint-box ' + (solve.hintRevealed ? 'tick' : 'qmark') + (solve.hintFlipping ? ' tile-flip' : '');
       rowEl.hintEl.textContent = solve.hintRevealed ? '\\u2713' : '?';
@@ -722,7 +770,10 @@ input:checked + .slider:before { transform: translateX(20px); }
     rowEl.engEl.style.width = engWidth + 'px';
 
     if (!st.englishRevealed && !st.englishFlipping) {
-      rowEl.engEl.className = 'hidden-spacer-wide'; rowEl.engEl.textContent = '';
+      // Empty white/bordered box — same look as the phoneme boxes'
+      // "not yet revealed" state — instead of fully invisible, so the
+      // flip-to-blue animation visibly starts FROM this box.
+      rowEl.engEl.className = 'eng-box empty'; rowEl.engEl.textContent = '';
     } else if (isFound || (solve && solve.wordBoxRevealed)) {
       rowEl.engEl.className = 'eng-box solved' + ((solve && solve.wordBoxFlipping) ? ' tile-flip' : '');
       rowEl.engEl.textContent = st.word;
@@ -732,6 +783,23 @@ input:checked + .slider:before { transform: translateX(20px); }
     }
   }
   function renderAllWordRows() { for (var i = 0; i < wordRowsState.length; i++) renderWordRow(i); }
+
+  // ---------- click-to-replay a found word's letters on the grid ----------
+  function handleFoundWordClick(word) {
+    if (isPuzzleComplete) return;
+    if (!foundWords[word]) return;
+    var cells = wordPhonemeCells[word];
+    if (!cells || cells.length === 0) return;
+
+    replayFlipping = {};
+
+    cells.forEach(function (cell, i) {
+      var key = cellKey(cell.row, cell.col);
+      var start = i * SOLVE_STAGGER_MS;
+      setTimeout(function () { replayFlipping[key] = true; renderCell(cell.row, cell.col); }, start);
+      setTimeout(function () { delete replayFlipping[key]; renderCell(cell.row, cell.col); }, start + FLIP_MS);
+    });
+  }
 
   // ---------- Start New Puzzle button ----------
   function startNewEnabled() { return isPlayable || startNewPuzzleReady; }
@@ -937,7 +1005,11 @@ input:checked + .slider:before { transform: translateX(20px); }
       stage3MaxEnd = Math.max(stage3MaxEnd, cursor);
     });
 
-    t(function () { isPlayable = true; updateStartNewButton(); }, stage3MaxEnd);
+    t(function () {
+      isPlayable = true;
+      updateStartNewButton();
+      triggerHintIndicatorIfFirstTime();
+    }, stage3MaxEnd);
   }
 
   // ---------- interaction ----------
@@ -1090,10 +1162,6 @@ input:checked + .slider:before { transform: translateX(20px); }
         t(function () { finaleCellStage[r2][c2] = 1; renderCell(r2, c2); }, start2 + FLIP_MS / 2);
         t(function () { finaleCellFlipping[r2][c2] = false; renderCell(r2, c2); }, start2 + FLIP_MS);
 
-        // This cell's own flip finishes at start2 + FLIP_MS — if it's one
-        // of the "great" special cells, reveal the connector BACK to the
-        // previous special cell at that exact moment (not the instant
-        // the whole finale stage began).
         var specialIdx = specialCells.findIndex(function (sc) { return sc.row === r2 && sc.col === c2; });
         if (specialIdx > 0) {
           t((function (specialIdx) { return function () { greatConnectedCount = specialIdx; renderConnectors(); }; })(specialIdx), start2 + FLIP_MS);

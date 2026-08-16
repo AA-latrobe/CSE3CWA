@@ -32,8 +32,6 @@ function flatIndex(row: number, col: number) {
 const WORD1_INDICES = [flatIndex(2, 2), flatIndex(2, 3), flatIndex(2, 4)];
 const WORD2_INDICES = [flatIndex(1, 6), flatIndex(2, 7), flatIndex(3, 8)];
 
-// Same positions as WORD1_INDICES/WORD2_INDICES, but as 0-indexed
-// row/col pairs — what computeSegmentsForCellSequence expects.
 const WORD1_CELLS = [
   { row: 1, col: 1 },
   { row: 1, col: 2 },
@@ -65,7 +63,8 @@ const SWIPE_STAGGER_MS = 100;
 const SWIPE_HOLD_MS = 500;
 const SOLVE_STAGGER_MS = 150;
 const GAP_BETWEEN_WORDS_MS = 500;
-const CELL_STAGGER_MS = 60; // gap between successive cells starting within one row
+const CELL_STAGGER_MS = 60;
+const HINT_INDICATOR_SIZE = 26;
 
 function emptyCellState(): CellState {
   return { revealed: false, flipping: false, color: 'grey' };
@@ -76,10 +75,11 @@ function emptyBoxState(): BoxState {
 
 type Props = {
   resetSignal: number;
+  isPlayable: boolean;
   onComplete?: () => void;
 };
 
-export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
+export default function WordSearchTitle({ resetSignal, isPlayable, onComplete }: Props) {
   const symbolsRef = useRef<string[]>([]);
   const [cellStates, setCellStates] = useState<CellState[]>(() =>
     Array.from({ length: ROWS * COLS }, emptyCellState)
@@ -90,10 +90,16 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
   const [word2ConnectedCount, setWord2ConnectedCount] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Always call the LATEST onComplete, not whichever version was current
-  // when this effect first scheduled its timers — important since the
-  // parent (WordSearchBuilder) redefines this callback every render, and
-  // by the time this fires (several seconds later) it needs fresh state.
+  // New: the "hint box" shown in the second instructions line — starts
+  // as a white/bordered box with "?" always visible, flips to yellow the
+  // moment the game genuinely becomes playable (tracked via the
+  // isPlayable prop, independent of this component's own internal
+  // title-animation timers).
+  const [hintIndicatorRevealed, setHintIndicatorRevealed] = useState(false);
+  const [hintIndicatorFlipping, setHintIndicatorFlipping] = useState(false);
+  const prevIsPlayableRef = useRef(false);
+  const hintIndicatorTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
@@ -138,6 +144,14 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     setSearchBox(emptyBoxState());
     setWord1ConnectedCount(0);
     setWord2ConnectedCount(0);
+
+    // Reset the hint indicator back to white/not-revealed on every title
+    // replay too, so it visually matches "everything else starts over."
+    hintIndicatorTimers.current.forEach(clearTimeout);
+    hintIndicatorTimers.current = [];
+    setHintIndicatorRevealed(false);
+    setHintIndicatorFlipping(false);
+    prevIsPlayableRef.current = false;
 
     const t = (fn: () => void, delay: number) => {
       timers.current.push(setTimeout(fn, delay));
@@ -205,7 +219,7 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
         t(() => setCellsFlipping([idx], false), start + FLIP_MS);
       });
 
-      time += REVEAL_STAGGER_MS; // next ROW still starts on the same schedule as before
+      time += REVEAL_STAGGER_MS;
     }
 
     t(() => setBoxFlipping('word', true), time);
@@ -230,10 +244,6 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
       t(() => setCellFlipping(idx, true), start);
       t(() => setCellColorFlip(idx, 'green'), start + FLIP_MS / 2);
       t(() => setCellFlipping(idx, false), start + FLIP_MS);
-      // Segment i-1 connects THIS cell back to the previous one — reveal
-      // it the instant this cell turns green, so connectors grow
-      // progressively alongside the letters instead of all appearing at
-      // once at the end.
       if (i > 0) {
         t(() => setWord1ConnectedCount(i), start + FLIP_MS / 2);
       }
@@ -269,7 +279,7 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
     // Closing flourish
     time = word2LettersEnd + FLIP_MS + SWIPE_HOLD_MS;
     const FLOURISH_STAGGER_MS = REVEAL_STAGGER_MS / 2;
-    const FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2; // keep the flourish's cell ripple proportionally faster too
+    const FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2;
 
     for (let row = 1; row <= ROWS; row++) {
       const rowIndices = Array.from({ length: COLS }, (_, c) => flatIndex(row, c + 1));
@@ -297,6 +307,32 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
       timers.current.forEach(clearTimeout);
     };
   }, [resetSignal]);
+
+  // Watches the game's real playable state (from WordSearchBuilder) —
+  // completely decoupled from this component's own title-animation
+  // timers. Fires once per false→true transition: flips the hint
+  // indicator box from white to yellow at the exact moment the game
+  // first becomes playable (same moment Start New Puzzle enables).
+  useEffect(() => {
+    if (isPlayable && !prevIsPlayableRef.current) {
+      prevIsPlayableRef.current = true;
+      hintIndicatorTimers.current.forEach(clearTimeout);
+      hintIndicatorTimers.current = [];
+      setHintIndicatorFlipping(true);
+      hintIndicatorTimers.current.push(
+        setTimeout(() => setHintIndicatorRevealed(true), FLIP_MS / 2),
+        setTimeout(() => setHintIndicatorFlipping(false), FLIP_MS)
+      );
+    } else if (!isPlayable) {
+      prevIsPlayableRef.current = false;
+    }
+  }, [isPlayable]);
+
+  useEffect(() => {
+    return () => {
+      hintIndicatorTimers.current.forEach(clearTimeout);
+    };
+  }, []);
 
   function cellClass(state: CellState) {
     if (!state.revealed) return 'border-2 border-foreground/20 bg-background';
@@ -389,11 +425,32 @@ export default function WordSearchTitle({ resetSignal, onComplete }: Props) {
         </div>
         <span>Game</span>
       </div>
+
+      <div
+        className="flex items-center justify-center gap-2 text-base text-foreground/70"
+        style={{ marginBottom: 8 }}
+      >
+        <span>To make a guess, click on a phoneme symbol and hold down your mouse while dragging, then release.</span>
+      </div>
+
       <div
         className="flex items-center justify-center gap-2 text-base text-foreground/70"
         style={{ marginBottom: 44 }}
       >
-        <span>To make a guess, click on a phoneme symbol and hold down your mouse while dragging, then release.</span>
+        <span>If you get stuck, click on a word's</span>
+        <div style={{ perspective: '400px' }}>
+          <div
+            className={`flex items-center justify-center rounded-md text-xs font-semibold ${
+              hintIndicatorRevealed
+                ? 'bg-partial text-partial-foreground'
+                : 'border border-foreground/20 bg-background text-foreground'
+            } ${hintIndicatorFlipping ? 'animate-tile-flip' : ''}`}
+            style={{ width: HINT_INDICATOR_SIZE, height: HINT_INDICATOR_SIZE }}
+          >
+            ?
+          </div>
+        </div>
+        <span>for a hint.</span>
       </div>
     </div>
   );

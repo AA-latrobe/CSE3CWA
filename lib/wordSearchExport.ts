@@ -886,8 +886,12 @@ input:checked + .slider:before { transform: translateX(20px); }
   function setTitleCell(idx, className, flipping, text) {
     var el = titleTiles[idx];
     el.className = 'title-tile' + (className ? ' ' + className : '') + (flipping ? ' tile-flip' : '');
-    if (text !== undefined) el.textContent = text;
+    if (text !== undefined) {
+      el.textContent = text;
+      el.title = text ? phonemeHoverText(text) : '';
+    }
   }
+  
   function setTitleBox(el, cls, flipping, text) {
     el.className = 'title-word-box' + (cls ? ' ' + cls : '') + (flipping ? ' tile-flip' : '');
     if (text !== undefined) el.textContent = text;

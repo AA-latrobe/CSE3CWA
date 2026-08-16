@@ -399,6 +399,7 @@ input:checked + .slider:before { transform: translateX(20px); }
       setTimeout(function () {
         tile.classList.add('tile-' + palette[i]);
         tile.textContent = symbol;
+        tile.title = phonemeHoverText(symbol);
       }, delay + FLIP_MS / 2);
       setTimeout(function () { tile.classList.remove('tile-flip'); }, delay + FLIP_MS);
     });

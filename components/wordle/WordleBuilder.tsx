@@ -19,7 +19,7 @@ import {
   GUESS_FLIP_STAGGER_MS,
   CellColor,
 } from '@/lib/wordleLogic';
-import { KEYPAD_TOP, KEYPAD_BOTTOM, PREVIEW_TITLE_PHONEMES, PhonemeWordEntry } from '@/lib/phonemeData';
+import { KEYPAD_TOP, KEYPAD_BOTTOM, KEYPAD_LEFT, KEYPAD_RIGHT, PREVIEW_TITLE_PHONEMES, PhonemeWordEntry } from '@/lib/phonemeData';
 import { getInitialWordleState, saveWordleState } from '@/lib/wordleStorage';
 import { downloadStandaloneWordleHtml } from '@/lib/wordleExport';
 
@@ -392,8 +392,8 @@ export default function WordleBuilder() {
 
           <div className="min-w-0 flex-1 pl-8">
             <PhonemeKeypad
-              topGrid={KEYPAD_TOP}
-              bottomGrid={KEYPAD_BOTTOM}
+              topGrid={KEYPAD_LEFT}
+              bottomGrid={KEYPAD_RIGHT}
               onSelect={handlePreviewSelect}
               onBackspace={handlePreviewBackspace}
               disabled={!isPlayable}
@@ -401,6 +401,10 @@ export default function WordleBuilder() {
               showEnter
               canSubmit={canSubmit}
               onEnter={handleEnter}
+              topLabel="Consonant Sounds:"
+              bottomLabel="Short & Long Vowels:"
+              bottomGapBeforeRowIndex={3}
+              bottomGapLabel="Diphthongs & Schwa:"
             />
           </div>
         </div>

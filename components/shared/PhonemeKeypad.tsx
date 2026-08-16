@@ -15,6 +15,10 @@ type Props = {
   canSubmit?: boolean;
   onEnter?: () => void;
   align?: 'start' | 'center';
+  topLabel?: string;
+  bottomLabel?: string;
+  bottomGapBeforeRowIndex?: number;
+  bottomGapLabel?: string;
 };
 
 const SIDE_BY_SIDE_THRESHOLD = 340;
@@ -40,6 +44,10 @@ export default function PhonemeKeypad({
   canSubmit,
   onEnter,
   align = 'start',
+  topLabel,
+  bottomLabel,
+  bottomGapBeforeRowIndex,
+  bottomGapLabel,
 }: Props) {
   const { ref, isWide } = useContainerWidth<HTMLDivElement>(SIDE_BY_SIDE_THRESHOLD);
 
@@ -70,6 +78,27 @@ export default function PhonemeKeypad({
     </div>
   );
 
+  const renderBottomGrid = () => {
+    if (bottomGapBeforeRowIndex === undefined) {
+      return renderGrid(bottomGrid, 'bottom');
+    }
+
+    const firstPart = bottomGrid.slice(0, bottomGapBeforeRowIndex);
+    const secondPart = bottomGrid.slice(bottomGapBeforeRowIndex);
+
+    return (
+      <div className="flex flex-col gap-1">
+        {renderGrid(firstPart, 'bottom-a')}
+        <div className="flex h-10 items-end justify-start">
+          {bottomGapLabel && (
+            <p className="text-sm font-medium text-foreground">{bottomGapLabel}</p>
+          )}
+        </div>
+        {renderGrid(secondPart, 'bottom-b')}
+      </div>
+    );
+  };
+
   return (
     <div ref={ref} className="w-full">
       <div
@@ -80,29 +109,37 @@ export default function PhonemeKeypad({
         }`}
       >
         <div className="flex flex-col items-center gap-3">
-          {renderGrid(topGrid, 'top')}
-          {showEnter && (
-            <button
-              type="button"
-              disabled={disabled || !canSubmit}
-              onClick={onEnter}
-              className="w-full rounded-md bg-match px-3 py-2 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ⏎ Enter
-            </button>
-          )}
+          <div className="flex flex-col items-center gap-1">
+            {topLabel && <p className="self-start text-sm font-medium text-foreground">{topLabel}</p>}
+            {renderGrid(topGrid, 'top')}
+          </div>
         </div>
 
         <div className="flex flex-col items-center gap-3">
-          {renderGrid(bottomGrid, 'bottom')}
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={onBackspace}
-            className="w-full rounded-md bg-partial px-3 py-2 text-sm font-medium text-partial-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            ⌫ Backspace
-          </button>
+          <div className="flex flex-col items-center gap-1">
+            {bottomLabel && <p className="self-start text-sm font-medium text-foreground">{bottomLabel}</p>}
+            {renderBottomGrid()}
+          </div>
+          <div className="grid w-full grid-cols-4 gap-1">
+            {showEnter && (
+              <button
+                type="button"
+                disabled={disabled || !canSubmit}
+                onClick={onEnter}
+                className="col-span-2 rounded-md bg-match px-3 py-2 text-sm font-medium text-match-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Enter
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onBackspace}
+              className={`${showEnter ? 'col-span-2' : 'col-span-2 col-start-3'} rounded-md bg-partial px-3 py-2 text-sm font-medium text-partial-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              ⌫
+            </button>
+          </div>
         </div>
       </div>
     </div>

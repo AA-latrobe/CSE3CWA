@@ -1,4 +1,4 @@
-import { PhonemeWordEntry, KEYPAD_TOP, KEYPAD_BOTTOM, PREVIEW_TITLE_PHONEMES } from './phonemeData';
+import { PhonemeWordEntry, KEYPAD_LEFT, KEYPAD_RIGHT, PREVIEW_TITLE_PHONEMES } from './phonemeData';
 
 function formatTimestamp(): string {
   const d = new Date();
@@ -23,8 +23,8 @@ export function downloadStandaloneWordleHtml(words: PhonemeWordEntry[], numGuess
 
 function generateStandaloneWordleHtml(words: PhonemeWordEntry[], numGuesses: number): string {
   const wordDataJson = JSON.stringify(words);
-  const keypadTopJson = JSON.stringify(KEYPAD_TOP);
-  const keypadBottomJson = JSON.stringify(KEYPAD_BOTTOM);
+  const keypadLeftJson = JSON.stringify(KEYPAD_LEFT);
+  const keypadRightJson = JSON.stringify(KEYPAD_RIGHT);
   const titlePhonemesJson = JSON.stringify(PREVIEW_TITLE_PHONEMES);
 
   return `<!DOCTYPE html>
@@ -93,10 +93,6 @@ body {
 }
 .title-row {
   display:flex; justify-content:center; gap:8px; margin-bottom: 44px;
-  /* Matches the height the Preview panel's "Preview" heading row (text +
-     mb-6) would occupy if it were present but invisible — keeps the
-     title's vertical position consistent between the live Preview and
-     this exported page. */
   margin-top: 52px;
 }
 .title-tile {
@@ -139,7 +135,12 @@ input:checked + .slider:before { transform: translateX(20px); }
 .guess-tile { width:48px; height:48px; border-radius:0.375rem; display:flex; align-items:center; justify-content:center; font-size:1.25rem; font-weight:600; border:2px solid rgba(128,128,128,0.2); color: var(--foreground); perspective:400px; }
 .keypad-col { flex:1; min-width:0; padding-left:32px; }
 .keypad-grids { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; }
+.keypad-half { display:flex; flex-direction:column; align-items:center; }
+.keypad-label { align-self:flex-start; font-size:0.875rem; font-weight:500; margin:0 0 4px 0; }
 .keypad-grid { display:grid; grid-template-columns: repeat(4, 40px); gap:4px; }
+.keypad-gap { width:176px; height:40px; display:flex; align-items:flex-end; justify-content:flex-start; margin:4px 0; }
+.keypad-gap-label { margin:0; font-size:0.875rem; font-weight:500; }
+.keypad-buttons { display:grid; grid-template-columns: repeat(4, 1fr); gap:4px; width:176px; margin-top:12px; }
 .key {
   width:40px; height:40px; border-radius:0.375rem; border:none; font-size:1rem; font-weight:500; cursor:pointer;
   background: var(--key); color: var(--key-foreground);
@@ -148,7 +149,10 @@ input:checked + .slider:before { transform: translateX(20px); }
 .key.used { background: var(--key-used); color: var(--key-used-foreground); }
 .key.green { background: var(--match); color: var(--match-foreground); }
 .key.yellow { background: var(--partial); color: var(--partial-foreground); }
-.enter-btn, .backspace-btn { width:100%; border-radius:0.375rem; padding:8px 12px; font-size:0.875rem; font-weight:500; border:none; cursor:pointer; margin-top:12px; }
+.enter-btn, .backspace-btn {
+  grid-column: span 2;
+  border-radius:0.375rem; padding:8px 12px; font-size:0.875rem; font-weight:500; border:none; cursor:pointer;
+}
 .enter-btn { background: var(--match); color: var(--match-foreground); }
 .backspace-btn { background: var(--partial); color: var(--partial-foreground); }
 .enter-btn:disabled, .backspace-btn:disabled { opacity:0.4; cursor:not-allowed; }
@@ -212,13 +216,21 @@ input:checked + .slider:before { transform: translateX(20px); }
     </div>
     <div class="keypad-col">
       <div class="keypad-grids">
-        <div>
-          <div class="keypad-grid" id="keypadTop"></div>
-          <button class="enter-btn" id="enterBtn">&#9166; Enter</button>
+        <div class="keypad-half">
+          <p class="keypad-label">Consonant Sounds:</p>
+          <div class="keypad-grid" id="keypadLeft"></div>
         </div>
-        <div>
-          <div class="keypad-grid" id="keypadBottom"></div>
-          <button class="backspace-btn" id="backspaceBtn">&#9003; Backspace</button>
+        <div class="keypad-half">
+          <p class="keypad-label">Short &amp; Long Vowels:</p>
+          <div class="keypad-grid" id="keypadRightTop"></div>
+          <div class="keypad-gap">
+            <p class="keypad-gap-label">Diphthongs &amp; Schwa:</p>
+          </div>
+          <div class="keypad-grid" id="keypadRightBottom"></div>
+          <div class="keypad-buttons">
+            <button class="enter-btn" id="enterBtn">Enter</button>
+            <button class="backspace-btn" id="backspaceBtn">&#9003;</button>
+          </div>
         </div>
       </div>
     </div>
@@ -231,8 +243,10 @@ input:checked + .slider:before { transform: translateX(20px); }
 (function () {
   var WORD_DATA = ${wordDataJson};
   var NUM_GUESSES = ${numGuesses};
-  var KEYPAD_TOP = ${keypadTopJson};
-  var KEYPAD_BOTTOM = ${keypadBottomJson};
+  var KEYPAD_LEFT = ${keypadLeftJson};
+  var KEYPAD_RIGHT = ${keypadRightJson};
+  var KEYPAD_RIGHT_TOP = KEYPAD_RIGHT.slice(0, 3);
+  var KEYPAD_RIGHT_BOTTOM = KEYPAD_RIGHT.slice(3);
   var TITLE_PHONEMES = ${titlePhonemesJson};
   var FLIP_MS = 500, STAGGER_MS = 150;
   var POST_REVEAL_HOLD_MS = 1000; // extra pause before Play Next Word/Start Over re-enables
@@ -429,8 +443,9 @@ input:checked + .slider:before { transform: translateX(20px); }
         });
       });
     }
-    build(document.getElementById('keypadTop'), KEYPAD_TOP);
-    build(document.getElementById('keypadBottom'), KEYPAD_BOTTOM);
+    build(document.getElementById('keypadLeft'), KEYPAD_LEFT);
+    build(document.getElementById('keypadRightTop'), KEYPAD_RIGHT_TOP);
+    build(document.getElementById('keypadRightBottom'), KEYPAD_RIGHT_BOTTOM);
   }
 
   function renderGuessRows(justSubmittedIndex) {
@@ -567,10 +582,6 @@ input:checked + .slider:before { transform: translateX(20px); }
       animateSolutionReveal();
     }, rowFlip + 1000);
 
-    // animateSolutionReveal's own final stage (word box flip) completes at
-    // phonemesEnd + FLIP_MS relative to when it starts (rowFlip + 1000).
-    // Add POST_REVEAL_HOLD_MS on top so the button stays locked a little
-    // longer after the animation visually finishes, not the instant it ends.
     var phonemesEnd = (wordSize() - 1) * STAGGER_MS + FLIP_MS;
     var totalRevealDuration = phonemesEnd + FLIP_MS;
 

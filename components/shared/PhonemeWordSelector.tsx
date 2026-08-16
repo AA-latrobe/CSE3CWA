@@ -4,8 +4,8 @@ import PhonemeKeypad from './PhonemeKeypad';
 import { useContainerWidth } from '@/lib/useContainerWidth';
 import {
   WORD_LIST,
-  KEYPAD_TOP,
-  KEYPAD_BOTTOM,
+  KEYPAD_LEFT,
+  KEYPAD_RIGHT,
   MAX_PHONEME_SLOTS,
   PhonemeWordEntry,
 } from '@/lib/phonemeData';
@@ -366,12 +366,17 @@ export default function PhonemeWordSelector({
       <div className="min-w-0 flex-1">
         <div className="mt-8">
           <PhonemeKeypad
-            topGrid={KEYPAD_TOP}
-            bottomGrid={KEYPAD_BOTTOM}
+            topGrid={KEYPAD_LEFT}
+            bottomGrid={KEYPAD_RIGHT}
             onSelect={handleKeypadSelect}
             onBackspace={handleBackspace}
             usedSymbols={usedSymbols}
             align="center"
+            topLabel="Consonant Sounds:"
+            bottomLabel="Short & Long Vowels:"
+            bottomGapBeforeRowIndex={3}
+            bottomGapLabel="Diphthongs & Schwa:"
+            showEnter={false}
           />
           <div className="mt-12 flex w-full justify-center">{footerSlot}</div>
         </div>

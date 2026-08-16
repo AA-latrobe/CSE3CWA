@@ -25,6 +25,9 @@ export const KEYPAD_GRID: string[][] = [
 export const KEYPAD_TOP = KEYPAD_GRID.slice(0, 6);
 export const KEYPAD_BOTTOM = KEYPAD_GRID.slice(6);
 
+export const KEYPAD_LEFT = KEYPAD_GRID.slice(0, 7);
+export const KEYPAD_RIGHT = KEYPAD_GRID.slice(7);
+
 export const MAX_PHONEME_SLOTS = 5;
 
 const RAW_WORD_LIST: PhonemeWordEntry[] = [

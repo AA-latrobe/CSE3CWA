@@ -135,8 +135,53 @@ export const DEFAULT_SELECTED_ENTRY: PhonemeWordEntry = WORD_LIST.find(
   (w) => w.word === DEFAULT_SELECTED_WORD
 )!;
 
+const PHONEME_EXAMPLES: Record<string, string> = {
+  'p': 'Pit, Pin, taP',
+  't': 'Ten, Tap, caT',
+  'k': 'Kit, Cat, saCK',
+  'b': 'Bat, Bed, ruBBer',
+  'd': 'Dog, Dig, aDD',
+  'g': 'Go, Get, eGG',
+  'n': 'No, Net, peN',
+  'm': 'Man, Map, haMMer',
+  'ŋ': 'siNG, riNG, thiNK',
+  'f': 'Fan, Fox, Phone',
+  's': 'Sun, See, ciTy',
+  'θ': 'THin, THink, THrough (Voiceless)',
+  'ʃ': 'SHip, SHe, Chef',
+  'v': 'Van, Very, haVe',
+  'z': 'Zoo, haS, buZZ',
+  'ð': 'THis, THem, fæTHer (Voiced)',
+  'ʒ': 'meaSUre, viSIon, caSUal',
+  'l': 'Lamp, Leg, baLL',
+  'ɹ': 'Run, Red, Write',
+  'w': 'Wet, Win, What',
+  'j': 'Yes, You, Use',
+  'h': 'Hat, Hot, Who',
+  'tʃ': 'CHip, CHurch, caTCH',
+  'dʒ': 'Judge, Jet, caGe',
+  'iː': 'sEE, bEAD, flEEce (Long)',
+  'ɪ': 'bId, kIt, sIt (Short)',
+  'e': 'bEd, drEss, mEn (Short)',
+  'eː': 'bAREd, squARE, chAIR (Long)',
+  'æ': 'bAd, trAp, cAt (Short)',
+  'ɐ': 'bUd, strUt, cUt (Short)',
+  'ɐː': 'bARd, stAR, fAther (Long)',
+  'ɜː': 'bIRd, nURse, hER (Long)',
+  'ʉː': 'bOOed, gOOse, twO (Long)',
+  'ɔ': 'bOd, gOt, lOt (Short)',
+  'oː': 'bOARd, thOUGHt, mORE (Long)',
+  'ʊ': 'gOOd, fOOt, pUt (Short)',
+  'æɪ': 'bAY, fAce, rAIn',
+  'ɑe': 'bUY, prIce, lIGHt',
+  'oɪ': 'bOY, chOIce, cOIn',
+  'əʉ': 'bOW (ribbon), gOAt, nO',
+  'æɔ': 'bOUGH, mOUth, cOW',
+  'ɪə': 'bEER, nEAR, hEAR',
+  'ə': 'Above, commA, lettER (The Unstressed "Schwa")',
+};
+
 export function getPhonemeHoverText(symbol: string): string {
-  // Placeholder — will grow to include a pronunciation example once that
-  // mapping table exists, e.g. `/${symbol}/ — as in "cat"`.
-  return `/${symbol}/`;
+  const examples = PHONEME_EXAMPLES[symbol];
+  return examples ? `/${symbol}/  ${examples}` : `/${symbol}/`;
 }

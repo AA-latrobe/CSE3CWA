@@ -268,6 +268,26 @@ input:checked + .slider:before { transform: translateX(20px); }
   var TITLE_FLOURISH_CELL_STAGGER_MS = CELL_STAGGER_MS / 2;
   var CONNECTOR_THICKNESS = 3;
   var CONNECTOR_OVERLAP = 3;
+  var PHONEME_EXAMPLES = {
+    'p': 'Pit, Pin, taP', 't': 'Ten, Tap, caT', 'k': 'Kit, Cat, saCK', 'b': 'Bat, Bed, ruBBer',
+    'd': 'Dog, Dig, aDD', 'g': 'Go, Get, eGG', 'n': 'No, Net, peN', 'm': 'Man, Map, haMMer',
+    'ŋ': 'siNG, riNG, thiNK', 'f': 'Fan, Fox, Phone', 's': 'Sun, See, ciTy',
+    'θ': 'THin, THink, THrough (Voiceless)', 'ʃ': 'SHip, SHe, Chef', 'v': 'Van, Very, haVe',
+    'z': 'Zoo, haS, buZZ', 'ð': 'THis, THem, fæTHer (Voiced)', 'ʒ': 'meaSUre, viSIon, caSUal',
+    'l': 'Lamp, Leg, baLL', 'ɹ': 'Run, Red, Write', 'w': 'Wet, Win, What', 'j': 'Yes, You, Use',
+    'h': 'Hat, Hot, Who', 'tʃ': 'CHip, CHurch, caTCH', 'dʒ': 'Judge, Jet, caGe',
+    'iː': 'sEE, bEAD, flEEce (Long)', 'ɪ': 'bId, kIt, sIt (Short)', 'e': 'bEd, drEss, mEn (Short)',
+    'eː': 'bAREd, squARE, chAIR (Long)', 'æ': 'bAd, trAp, cAt (Short)', 'ɐ': 'bUd, strUt, cUt (Short)',
+    'ɐː': 'bARd, stAR, fAther (Long)', 'ɜː': 'bIRd, nURse, hER (Long)', 'ʉː': 'bOOed, gOOse, twO (Long)',
+    'ɔ': 'bOd, gOt, lOt (Short)', 'oː': 'bOARd, thOUGHt, mORE (Long)', 'ʊ': 'gOOd, fOOt, pUt (Short)',
+    'æɪ': 'bAY, fAce, rAIn', 'ɑe': 'bUY, prIce, lIGHt', 'oɪ': 'bOY, chOIce, cOIn',
+    'əʉ': 'bOW (ribbon), gOAt, nO', 'æɔ': 'bOUGH, mOUth, cOW', 'ɪə': 'bEER, nEAR, hEAR',
+    'ə': 'Above, commA, lettER (The Unstressed "Schwa")'
+  };
+  function phonemeHoverText(symbol) {
+    var examples = PHONEME_EXAMPLES[symbol];
+    return examples ? '/' + symbol + '/  ' + examples : '/' + symbol + '/';
+  }
 
   var ALL_PHONEME_SYMBOLS = KEYPAD_TOP.concat(KEYPAD_BOTTOM).reduce(function (acc, row) { return acc.concat(row); }, []).filter(function (s) { return s; });
 
@@ -619,7 +639,7 @@ input:checked + .slider:before { transform: translateX(20px); }
         if (isSpecial) {
           el.className = 'gcell green' + (finaleCellFlipping[r][c] ? ' tile-flip' : '');
           var sym = GREAT_PHONEMES[specialKeySet[key]] || '';
-          el.textContent = sym; el.title = sym ? ('/' + sym + '/') : '';
+          el.textContent = sym; el.title = sym ? phonemeHoverText(sym) : '';
         } else {
           el.className = 'gcell finale-green-border' + (finaleCellFlipping[r][c] ? ' tile-flip' : '');
           el.textContent = ''; el.title = '';
@@ -682,7 +702,7 @@ input:checked + .slider:before { transform: translateX(20px); }
 
     el.className = 'gcell ' + colorClass + (flipping ? ' tile-flip' : '');
     el.textContent = symbol || '';
-    el.title = symbol ? ('/' + symbol + '/') : '';
+    el.title = symbol ? phonemeHoverText(symbol) : '';
   }
 
   function renderAllCells() {
@@ -750,16 +770,16 @@ input:checked + .slider:before { transform: translateX(20px); }
 
       var isHintThis = hintActive && hintActive.word === st.word && hintActive.phonemeIndex === i;
       if (isFound) {
-        slotEl.className = 'ph-slot green'; slotEl.textContent = symbol; slotEl.title = '/' + symbol + '/';
+        slotEl.className = 'ph-slot green'; slotEl.textContent = symbol; slotEl.title = phonemeHoverText(symbol);
       } else if (solve) {
         var revealed = solve.letterRevealed[i];
         slotEl.className = 'ph-slot ' + (revealed ? 'green' : 'empty') + (solve.letterFlipping[i] ? ' tile-flip' : '');
         slotEl.textContent = revealed ? symbol : '';
-        slotEl.title = revealed ? ('/' + symbol + '/') : '';
+        slotEl.title = revealed ? phonemeHoverText(symbol) : '';
       } else if (isHintThis) {
         slotEl.className = 'ph-slot ' + (hintActive.revealed ? 'yellow' : 'empty') + (hintActive.flipping ? ' tile-flip' : '');
         slotEl.textContent = hintActive.revealed ? symbol : '';
-        slotEl.title = hintActive.revealed ? ('/' + symbol + '/') : '';
+        slotEl.title = hintActive.revealed ? phonemeHoverText(symbol) : '';
       } else {
         slotEl.className = 'ph-slot empty'; slotEl.textContent = ''; slotEl.title = '';
       }

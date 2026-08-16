@@ -236,6 +236,26 @@ input:checked + .slider:before { transform: translateX(20px); }
   var TITLE_PHONEMES = ${titlePhonemesJson};
   var FLIP_MS = 500, STAGGER_MS = 150;
   var POST_REVEAL_HOLD_MS = 1000; // extra pause before Play Next Word/Start Over re-enables
+  var PHONEME_EXAMPLES = {
+    'p': 'Pit, Pin, taP', 't': 'Ten, Tap, caT', 'k': 'Kit, Cat, saCK', 'b': 'Bat, Bed, ruBBer',
+    'd': 'Dog, Dig, aDD', 'g': 'Go, Get, eGG', 'n': 'No, Net, peN', 'm': 'Man, Map, haMMer',
+    'ŋ': 'siNG, riNG, thiNK', 'f': 'Fan, Fox, Phone', 's': 'Sun, See, ciTy',
+    'θ': 'THin, THink, THrough (Voiceless)', 'ʃ': 'SHip, SHe, Chef', 'v': 'Van, Very, haVe',
+    'z': 'Zoo, haS, buZZ', 'ð': 'THis, THem, fæTHer (Voiced)', 'ʒ': 'meaSUre, viSIon, caSUal',
+    'l': 'Lamp, Leg, baLL', 'ɹ': 'Run, Red, Write', 'w': 'Wet, Win, What', 'j': 'Yes, You, Use',
+    'h': 'Hat, Hot, Who', 'tʃ': 'CHip, CHurch, caTCH', 'dʒ': 'Judge, Jet, caGe',
+    'iː': 'sEE, bEAD, flEEce (Long)', 'ɪ': 'bId, kIt, sIt (Short)', 'e': 'bEd, drEss, mEn (Short)',
+    'eː': 'bAREd, squARE, chAIR (Long)', 'æ': 'bAd, trAp, cAt (Short)', 'ɐ': 'bUd, strUt, cUt (Short)',
+    'ɐː': 'bARd, stAR, fAther (Long)', 'ɜː': 'bIRd, nURse, hER (Long)', 'ʉː': 'bOOed, gOOse, twO (Long)',
+    'ɔ': 'bOd, gOt, lOt (Short)', 'oː': 'bOARd, thOUGHt, mORE (Long)', 'ʊ': 'gOOd, fOOt, pUt (Short)',
+    'æɪ': 'bAY, fAce, rAIn', 'ɑe': 'bUY, prIce, lIGHt', 'oɪ': 'bOY, chOIce, cOIn',
+    'əʉ': 'bOW (ribbon), gOAt, nO', 'æɔ': 'bOUGH, mOUth, cOW', 'ɪə': 'bEER, nEAR, hEAR',
+    'ə': 'Above, commA, lettER (The Unstressed "Schwa")'
+  };
+  function phonemeHoverText(symbol) {
+    var examples = PHONEME_EXAMPLES[symbol];
+    return examples ? '/' + symbol + '/  ' + examples : '/' + symbol + '/';
+  }
 
   // ---------- theme ----------
   function loadTheme() {
@@ -398,7 +418,7 @@ input:checked + .slider:before { transform: translateX(20px); }
           var btn = document.createElement('button');
           btn.className = 'key';
           btn.textContent = symbol;
-          btn.title = '/' + symbol + '/';
+          btn.title = phonemeHoverText(symbol);
           var c = letterColors[symbol];
           if (c === 'green') btn.classList.add('green');
           else if (c === 'yellow') btn.classList.add('yellow');
@@ -425,7 +445,9 @@ input:checked + .slider:before { transform: translateX(20px); }
       for (var i = 0; i < wordSize(); i++) {
         var tile = document.createElement('div');
         tile.className = 'guess-tile';
-        tile.textContent = symbols[i] || '';
+        var sym = symbols[i] || '';
+        tile.textContent = sym;
+        if (sym) tile.title = phonemeHoverText(sym);
         if (colors && r !== justSubmittedIndex) tile.classList.add('tile-' + colors[i]);
         row.appendChild(tile);
       }
@@ -476,6 +498,7 @@ input:checked + .slider:before { transform: translateX(20px); }
       setTimeout(function () {
         tile.classList.add('tile-green');
         tile.textContent = symbol;
+        tile.title = phonemeHoverText(symbol);
       }, delay + FLIP_MS / 2);
       setTimeout(function () { tile.classList.remove('tile-flip'); }, delay + FLIP_MS);
     });
